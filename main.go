@@ -13,10 +13,6 @@ import (
 	"github.com/go-redis/redis"
 )
 
-// (guild) <guild id>
-// (guild:<guild id>:member) <member id>
-// (guild:<guild id>:role) <role id>
-
 /*
 
 data required:

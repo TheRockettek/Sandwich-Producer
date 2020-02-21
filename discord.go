@@ -1,7 +1,7 @@
-// Discordgo - Discord bindings for Go
-// Available at https://github.com/bwmarrin/discordgo
+// Sandwich
+// Available at https://github.com/TheRockettek/Sandwich-Producer
 
-// Copyright 2015-2016 Bruce Marriner <bruce@sqls.net>.  All rights reserved.
+// Copyright 2020 TheRockettek.  All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -20,8 +20,8 @@ import (
 	"time"
 )
 
-// VERSION of DiscordGo, follows Semantic Versioning. (http://semver.org/)
-const VERSION = "0.20.2"
+// VERSION of Sandwich, follows Semantic Versioning. (http://semver.org/)
+const VERSION = "0.1"
 
 // ErrMFA will be risen by New when the user has 2FA.
 var ErrMFA = errors.New("account has 2FA enabled")
@@ -29,11 +29,10 @@ var ErrMFA = errors.New("account has 2FA enabled")
 // New creates a new Discord session and will automate some startup
 // tasks if given enough information to do so.  Currently you can pass zero
 // arguments and it will return an empty Discord session.
+// To call new you require to provide a bot token. Bot will be prepended
+// if it is not added. It is also required that the appropriate sandwich
+// struct is also passed so it know what it has to do.
 // There are 3 ways to call New:
-//     With a single auth token - All requests will use the token blindly,
-//         no verification of the token will be done and requests may fail.
-//         IF THE TOKEN IS FOR A BOT, IT MUST BE PREFIXED WITH `BOT `
-//         eg: `"Bot <token>"`
 func New(data StartupData, args ...interface{}) (s *Session, err error) {
 
 	// Create an empty Session interface.
@@ -47,7 +46,7 @@ func New(data StartupData, args ...interface{}) (s *Session, err error) {
 		ShardCount:             1,
 		MaxRestRetries:         3,
 		Client:                 &http.Client{Timeout: (20 * time.Second)},
-		UserAgent:              "DiscordBot (https://github.com/bwmarrin/discordgo, v" + VERSION + ")",
+		UserAgent:              "DiscordBot (https://github.com/TheRockettek/Sandwich-Producer, v" + VERSION + ")",
 		sequence:               new(int64),
 		LastHeartbeatAck:       time.Now().UTC(),
 		ready:                  false,
