@@ -193,6 +193,8 @@ func main() {
 		}
 	}
 
+	log.Println(len(res))
+
 	state := NewState()
 	state.TrackChannels = true
 	state.TrackEmojis = true
@@ -204,7 +206,11 @@ func main() {
 
 	// Create sessions
 	session := NewDiscord(data, data.Token)
-	ch, _ := session.Open(data, state)
+	ch, err := session.Open(data, state)
+
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 
 	log.Println("Sessions have now started. Do ^C to close sessions.")
 

@@ -1,7 +1,7 @@
 // Sandwich
 // Available at https://github.com/TheRockettek/Sandwich-Producer
 
-// Copyright 2020 BruceTheRockettek.  All rights reserved.
+// Copyright 2020 TheRockettek.  All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 

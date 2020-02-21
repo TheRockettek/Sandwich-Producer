@@ -13,13 +13,14 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 
 	"github.com/go-redis/redis"
+	"github.com/vmihailenco/msgpack"
 )
 
 // ErrNilState is returned when the state is nil.
@@ -65,9 +66,9 @@ func NewState() *State {
 func (s *State) createMemberMap(guild *Guild) {
 	values := make(map[string]interface{})
 	for _, m := range guild.Members {
-		_m, err := json.Marshal(m)
+		_m, err := msgpack.Marshal(m)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 		values[m.User.ID] = _m
 	}
@@ -87,22 +88,29 @@ func (s *State) GuildAdd(guild *Guild) error {
 	// Update the channels to point to the right guild, adding them to the channelMap as we go
 	values := make(map[string]interface{})
 	for _, c := range guild.Channels {
-		_c, err := json.Marshal(c)
+		_c, err := msgpack.Marshal(c)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 		values[c.ID] = _c
 	}
-	s.Redis.HMSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, guild.ID), values)
 
-	_g, err := json.Marshal(guild)
-	if err != nil {
-		fmt.Println(err)
+	// Check if guild has channels unless error will return
+	if len(values) > 0 {
+		err := s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, guild.ID), values).Err()
+		if err != nil {
+			log.Println(err.Error())
+		}
 	}
 
-	err = s.Redis.HSet(fmt.Sprintf("%s:guilds", ""), guild.ID, _g).Err()
+	_g, err := msgpack.Marshal(guild)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err.Error())
+	}
+
+	err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+	if err != nil {
+		log.Println(err.Error())
 	}
 
 	return nil
@@ -114,17 +122,12 @@ func (s *State) GuildRemove(guild *Guild) error {
 		return ErrNilState
 	}
 
-	_, err := s.Guild(guild.ID)
-	if err != nil {
-		return err
-	}
-
 	s.Lock()
 	defer s.Unlock()
 
-	err = s.Redis.HDel(fmt.Sprintf("%s:guilds", ""), guild.ID).Err()
+	err := s.Redis.HDel(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID).Err()
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err.Error())
 	}
 
 	return nil
@@ -142,10 +145,10 @@ func (s *State) Guild(guildID string) (*Guild, error) {
 	s.RLock()
 	defer s.RUnlock()
 
-	val, err := s.Redis.HGet(fmt.Sprintf("%s:guild", ""), guildID).Result()
+	val, err := s.Redis.HGet(fmt.Sprintf("%s:guild", s.RedisPrefix), guildID).Result()
 	if err != redis.Nil {
 		var g *Guild
-		json.Unmarshal([]byte(val), &g)
+		msgpack.Unmarshal([]byte(val), &g)
 
 		return g, nil
 	}
@@ -175,23 +178,23 @@ func (s *State) MemberAdd(member *Member) error {
 	if err == redis.Nil || err == nil {
 		var m *Member
 		if err == nil {
-			json.Unmarshal([]byte(val), &m)
+			msgpack.Unmarshal([]byte(val), &m)
 		}
 		if member.JoinedAt == "" {
 			member.JoinedAt = m.JoinedAt
 		}
 		*m = *member
 
-		_m, err := json.Marshal(m)
+		_m, err := msgpack.Marshal(m)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 		err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID, _m).Err()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 	} else {
-		fmt.Println(err)
+		log.Println(err.Error())
 	}
 
 	return nil
@@ -213,7 +216,7 @@ func (s *State) MemberRemove(member *Member) error {
 
 	exists, err := s.Redis.Exists(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID)).Result()
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err.Error())
 	}
 	if exists == 0 {
 		return ErrStateNotFound
@@ -221,7 +224,7 @@ func (s *State) MemberRemove(member *Member) error {
 
 	val, err := s.Redis.HExists(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID).Result()
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err.Error())
 	}
 	if !val {
 		return ErrStateNotFound
@@ -229,7 +232,7 @@ func (s *State) MemberRemove(member *Member) error {
 
 	err = s.Redis.HDel(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID).Err()
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err.Error())
 	}
 
 	return nil
@@ -249,11 +252,11 @@ func (s *State) Member(guildID, userID string) (*Member, error) {
 		return nil, ErrStateNotFound
 	}
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err.Error())
 	}
 
 	var m *Member
-	json.Unmarshal([]byte(val), &m)
+	msgpack.Unmarshal([]byte(val), &m)
 
 	return m, nil
 }
@@ -281,6 +284,17 @@ func (s *State) RoleAdd(guildID string, role *Role) error {
 	}
 
 	guild.Roles = append(guild.Roles, role)
+
+	_g, err := msgpack.Marshal(guild)
+	if err != nil {
+		log.Println(err.Error())
+	}
+
+	err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+	if err != nil {
+		log.Println(err.Error())
+	}
+
 	return nil
 }
 
@@ -303,6 +317,16 @@ func (s *State) RoleRemove(guildID, roleID string) error {
 			guild.Roles = append(guild.Roles[:i], guild.Roles[i+1:]...)
 			return nil
 		}
+	}
+
+	_g, err := msgpack.Marshal(guild)
+	if err != nil {
+		log.Println(err.Error())
+	}
+
+	err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+	if err != nil {
+		log.Println(err.Error())
 	}
 
 	return ErrStateNotFound
@@ -348,7 +372,7 @@ func (s *State) ChannelAdd(channel *Channel) error {
 	if err == redis.Nil || err == nil {
 		var c *Channel
 		if err == nil {
-			json.Unmarshal([]byte(val), &c)
+			msgpack.Unmarshal([]byte(val), &c)
 			if channel.Messages == nil {
 				channel.Messages = c.Messages
 			}
@@ -359,30 +383,32 @@ func (s *State) ChannelAdd(channel *Channel) error {
 		}
 	}
 
-	var _c string
 	if channel.Type == ChannelTypeDM || channel.Type == ChannelTypeGroupDM {
-		_c, err := json.Marshal(channel)
+		_c, err := msgpack.Marshal(channel)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 		err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, "priv"), channel.ID, _c).Err()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
+		}
+		err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), channel.ID, _c).Err()
+		if err != nil {
+			log.Println(err.Error())
 		}
 	} else {
-		_c, err := json.Marshal(channel)
+		_c, err := msgpack.Marshal(channel)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 		err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, channel.GuildID), channel.ID, _c).Err()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
-	}
-
-	err = s.Redis.HSet(fmt.Sprintf("%s:channels", ""), channel.ID, _c).Err()
-	if err != nil {
-		fmt.Println(err)
+		err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), channel.ID, _c).Err()
+		if err != nil {
+			log.Println(err.Error())
+		}
 	}
 
 	return nil
@@ -405,7 +431,7 @@ func (s *State) ChannelRemove(channel *Channel) error {
 
 		err := s.Redis.HDel(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, "priv"), channel.ID).Err()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 	} else {
 		s.Lock()
@@ -413,13 +439,13 @@ func (s *State) ChannelRemove(channel *Channel) error {
 
 		err := s.Redis.HDel(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, channel.GuildID), channel.ID).Err()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 	}
 
-	err = s.Redis.HDel(fmt.Sprintf("%s:channels", ""), channel.ID).Err()
+	err = s.Redis.HDel(fmt.Sprintf("%s:channels", s.RedisPrefix), channel.ID).Err()
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err.Error())
 	}
 
 	return nil
@@ -446,11 +472,11 @@ func (s *State) Channel(channelID string) (*Channel, error) {
 	s.RLock()
 	defer s.RUnlock()
 
-	val, err := s.Redis.HGet(fmt.Sprintf("%s:channels", ""), channelID).Result()
+	val, err := s.Redis.HGet(fmt.Sprintf("%s:channels", s.RedisPrefix), channelID).Result()
 
 	if err == nil {
 		var c *Channel
-		json.Unmarshal([]byte(val), &c)
+		msgpack.Unmarshal([]byte(val), &c)
 		return c, nil
 	}
 
@@ -502,6 +528,17 @@ func (s *State) EmojiAdd(guildID string, emoji *Emoji) error {
 	}
 
 	guild.Emojis = append(guild.Emojis, emoji)
+
+	_g, err := msgpack.Marshal(guild)
+	if err != nil {
+		log.Println(err.Error())
+	}
+
+	err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+	if err != nil {
+		log.Println(err.Error())
+	}
+
 	return nil
 }
 
@@ -565,6 +602,22 @@ func (s *State) MessageAdd(message *Message) error {
 	if len(c.Messages) > s.MaxMessageCount {
 		c.Messages = c.Messages[len(c.Messages)-s.MaxMessageCount:]
 	}
+
+	_c, err := msgpack.Marshal(c)
+	if err != nil {
+		log.Println(err.Error())
+	}
+
+	err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, c.GuildID), c.ID, _c).Err()
+	if err != nil {
+		log.Println(err.Error())
+	}
+
+	err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID, _c).Err()
+	if err != nil {
+		log.Println(err.Error())
+	}
+
 	return nil
 }
 
@@ -590,7 +643,21 @@ func (s *State) messageRemoveByID(channelID, messageID string) error {
 	for i, m := range c.Messages {
 		if m.ID == messageID {
 			c.Messages = append(c.Messages[:i], c.Messages[i+1:]...)
-			return nil
+
+			_c, err := msgpack.Marshal(c)
+			if err != nil {
+				log.Println(err.Error())
+			}
+
+			err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, c.GuildID), c.ID, _c).Err()
+			if err != nil {
+				log.Println(err.Error())
+			}
+
+			err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID, _c).Err()
+			if err != nil {
+				log.Println(err.Error())
+			}
 		}
 	}
 
@@ -647,32 +714,32 @@ func (s *State) onReady(se *Session, r *Ready) (err error) {
 
 	for _, g := range s.Guilds {
 
-		_g, err := json.Marshal(g)
+		_g, err := msgpack.Marshal(g)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 
-		err = s.Redis.HSet(fmt.Sprintf("%s:guild", ""), g.ID, _g).Err()
+		err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), g.ID, _g).Err()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 
 		s.createMemberMap(g)
 
 		for _, c := range g.Channels {
-			_c, err := json.Marshal(c)
-			err = s.Redis.HSet(fmt.Sprintf("%s:channels", ""), c.ID, _c).Err()
+			_c, err := msgpack.Marshal(c)
+			err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID, _c).Err()
 			if err != nil {
-				fmt.Println(err)
+				log.Println(err.Error())
 			}
 		}
 	}
 
 	for _, c := range s.PrivateChannels {
-		_c, err := json.Marshal(c)
-		err = s.Redis.HSet(fmt.Sprintf("%s:channels", ""), c.ID, _c).Err()
+		_c, err := msgpack.Marshal(c)
+		err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID, _c).Err()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err.Error())
 		}
 	}
 
