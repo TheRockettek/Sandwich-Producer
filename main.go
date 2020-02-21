@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-redis/redis"
 )
 
@@ -75,6 +76,8 @@ type StartupData struct {
 
 	// Events which are sent to cache but not distributed
 	IgnoredEvents []string `json:"ignored_events"`
+
+	KafkaClient *kafka.Producer
 }
 
 // NewDiscord Creates a new discord service for sharding.
@@ -146,15 +149,12 @@ func (d *SessionProvider) Open(args StartupData, state *State) (<-chan Event, er
 
 // Receive will handle forwarding events
 func (d *SessionProvider) Receive(args StartupData, c <-chan Event) {
-	max := 0
-	total := 0
 	for evnt := range c {
-		total++
-		if len(c) > max {
-			max = len(c)
-		}
-		_ = evnt
-		// fmt.Printf("%s [%d/%d/%d]\n", evnt.Type, len(c), max, total)
+		v, _ := json.Marshal(evnt)
+		args.KafkaClient.Produce(&kafka.Message{
+			TopicPartition: kafka.TopicPartition{Topic: &args.Identity, Partition: 0},
+			Value:          []byte(v),
+		}, nil)
 	}
 }
 
@@ -171,6 +171,15 @@ func main() {
 		DB:       0,
 	})
 
+	kafkaClient, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": data.KafkaAddress})
+	if err != nil {
+		panic(err)
+	}
+
+	defer kafkaClient.Close()
+	defer redisClient.Close()
+	data.KafkaClient = kafkaClient
+
 	// prefix:...
 	// guild:<>
 	// guild:<>:member:<>
@@ -186,14 +195,11 @@ func main() {
 	}
 
 	for _, key := range res {
-		log.Println(key)
 		err := redisClient.Del(key).Err()
 		if err != nil {
 			panic(err)
 		}
 	}
-
-	log.Println(len(res))
 
 	state := NewState()
 	state.TrackChannels = true
@@ -229,4 +235,7 @@ func main() {
 		time.Sleep(time.Second)
 		log.Printf("Waiting for producer channel: %s / 10s\n", time.Now().Sub(start))
 	}
+
+	log.Println("Waiting for producer messages")
+	kafkaClient.Flush(15000)
 }
