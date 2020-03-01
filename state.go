@@ -123,6 +123,7 @@ func (s *State) GuildRemove(guild *Guild) error {
 	s.Lock()
 	defer s.Unlock()
 
+	// Remove guild channels from global cache
 	for _, c := range guild.Channels {
 		err := s.Redis.HDel(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID).Err()
 		if err != nil {
@@ -707,12 +708,12 @@ func (s *State) onReady(se *Session, r *Ready) (err error) {
 			log.Println(err.Error())
 		}
 
+		s.createMemberMap(g)
+
 		err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), g.ID, _g).Err()
 		if err != nil {
 			log.Println(err.Error())
 		}
-
-		s.createMemberMap(g)
 
 		for _, c := range g.Channels {
 			_c, err := msgpack.Marshal(c)

@@ -448,12 +448,12 @@ type Guild struct {
 	// A list of the members in the guild.
 	// This field is only present in GUILD_CREATE events and websocket
 	// update events, and thus is only present in state-cached guilds.
-	Members []*Member `json:"members"`
+	Members []*Member `json:"-"`
 
 	// A list of partial presence objects for members in the guild.
 	// This field is only present in GUILD_CREATE events and websocket
 	// update events, and thus is only present in state-cached guilds.
-	Presences []*Presence `json:"presences"`
+	Presences []*Presence `json:"-"`
 
 	// A list of channels in the guild.
 	// This field is only present in GUILD_CREATE events and websocket
@@ -463,7 +463,7 @@ type Guild struct {
 	// A list of voice states for the guild.
 	// This field is only present in GUILD_CREATE events and websocket
 	// update events, and thus is only present in state-cached guilds.
-	VoiceStates []*VoiceState `json:"voice_states"`
+	VoiceStates []*VoiceState `json:"-"`
 
 	// Whether this guild is currently unavailable (most likely due to outage).
 	// This field is only present in GUILD_CREATE events and websocket
@@ -531,7 +531,7 @@ type GuildParams struct {
 	Name                        string             `json:"name,omitempty"`
 	Region                      string             `json:"region,omitempty"`
 	VerificationLevel           *VerificationLevel `json:"verification_level,omitempty"`
-	DefaultMessageNotifications int                `json:"default_message_notifications,omitempty"` // TODO: Separate type?
+	DefaultMessageNotifications int                `json:"default_message_notifications,omitempty"`
 	AfkChannelID                string             `json:"afk_channel_id,omitempty"`
 	AfkTimeout                  int                `json:"afk_timeout,omitempty"`
 	Icon                        string             `json:"icon,omitempty"`
