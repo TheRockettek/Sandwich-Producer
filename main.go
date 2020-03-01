@@ -141,7 +141,10 @@ func (d *SessionProvider) Open(args StartupData, state *State) (<-chan Event, er
 	go d.Receive(args, d.eventChannel)
 
 	for i := range d.AppSessions {
-		d.AppSessions[i].Open()
+		err := d.AppSessions[i].Open()
+		if err != nil {
+			log.Println(err.Error())
+		}
 	}
 
 	return d.eventChannel, nil
@@ -149,12 +152,18 @@ func (d *SessionProvider) Open(args StartupData, state *State) (<-chan Event, er
 
 // Receive will handle forwarding events
 func (d *SessionProvider) Receive(args StartupData, c <-chan Event) {
+	pchan := args.KafkaClient.ProduceChannel()
+	maxlen := 1000000
 	for evnt := range c {
 		v, _ := json.Marshal(evnt)
-		args.KafkaClient.Produce(&kafka.Message{
+		if len(v) > maxlen {
+			maxlen = len(v)
+			log.Printf("Sent larger payload than before: %d", maxlen)
+		}
+		pchan <- &kafka.Message{
 			TopicPartition: kafka.TopicPartition{Topic: &args.Identity, Partition: 0},
 			Value:          []byte(v),
-		}, nil)
+		}
 	}
 }
 
@@ -171,7 +180,7 @@ func main() {
 		DB:       0,
 	})
 
-	kafkaClient, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": data.KafkaAddress})
+	kafkaClient, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": data.KafkaAddress, "message.max.bytes": 1024 * 1024 * 512})
 	if err != nil {
 		panic(err)
 	}
@@ -179,6 +188,17 @@ func main() {
 	defer kafkaClient.Close()
 	defer redisClient.Close()
 	data.KafkaClient = kafkaClient
+
+	go func() {
+		for e := range kafkaClient.Events() {
+			switch ev := e.(type) {
+			case *kafka.Message:
+				if ev.TopicPartition.Error != nil {
+					log.Printf("Delivery failed: %v\n%s\n", ev.TopicPartition, ev.TopicPartition.Error.Error())
+				}
+			}
+		}
+	}()
 
 	// prefix:...
 	// guild:<>
@@ -204,9 +224,8 @@ func main() {
 	state := NewState()
 	state.TrackChannels = true
 	state.TrackEmojis = true
-	state.TrackMembers = false
+	state.TrackMembers = true
 	state.TrackRoles = true
-	state.TrackVoice = false
 	state.Redis = redisClient
 	state.RedisPrefix = data.Prefix
 
@@ -233,9 +252,16 @@ func main() {
 	start := time.Now()
 	for len(ch) > 0 && time.Now().Sub(start) < (time.Second*10) {
 		time.Sleep(time.Second)
-		log.Printf("Waiting for producer channel: %s / 10s\n", time.Now().Sub(start))
+		log.Printf("Waiting for producer channel... %s/10s\n", time.Now().Sub(start))
 	}
 
-	log.Println("Waiting for producer messages")
-	kafkaClient.Flush(15000)
+	start = time.Now()
+	for time.Now().Sub(start) < (time.Second * 10) {
+		remain := kafkaClient.Flush(1000)
+		if remain == 0 {
+			break
+		}
+		log.Printf("Waiting for %d kafka messages... %s/10s\n", remain, time.Now().Sub(start))
+	}
+
 }

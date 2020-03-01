@@ -162,7 +162,6 @@ func (s *Session) Open() error {
 		state.TrackEmojis = true
 		state.TrackMembers = true
 		state.TrackRoles = true
-		state.TrackVoice = true
 		s.State = state
 	}
 
@@ -174,11 +173,6 @@ func (s *Session) Open() error {
 	e, err = s.onEvent(mt, m)
 	if err != nil {
 		return err
-	}
-	if e.Type != `READY` && e.Type != `RESUMED` {
-		// This is not fatal, but it does not follow their API documentation.
-		strStr, _ := json.Marshal(e.RawData)
-		s.log(LogWarning, "Expected READY/RESUMED, instead got event type '%s':\n%s\n", e.Type, string(strStr))
 	}
 	s.log(LogDebug, "First Packet:\n%#v\n", e)
 

@@ -47,7 +47,6 @@ type State struct {
 	TrackEmojis     bool
 	TrackMembers    bool
 	TrackRoles      bool
-	TrackVoice      bool
 	TrackPresences  bool
 }
 
@@ -58,7 +57,6 @@ func NewState() *State {
 		TrackEmojis:    true,
 		TrackMembers:   true,
 		TrackRoles:     true,
-		TrackVoice:     true,
 		TrackPresences: true,
 	}
 }
@@ -125,6 +123,13 @@ func (s *State) GuildRemove(guild *Guild) error {
 	s.Lock()
 	defer s.Unlock()
 
+	for _, c := range guild.Channels {
+		err := s.Redis.HDel(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID).Err()
+		if err != nil {
+			log.Println(err.Error())
+		}
+	}
+
 	err := s.Redis.HDel(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID).Err()
 	if err != nil {
 		log.Println(err.Error())
@@ -179,21 +184,20 @@ func (s *State) MemberAdd(member *Member) error {
 		var m *Member
 		if err == nil {
 			msgpack.Unmarshal([]byte(val), &m)
+			if member.JoinedAt == "" {
+				member.JoinedAt = m.JoinedAt
+			}
+			*m = *member
 		}
-		if member.JoinedAt == "" {
-			member.JoinedAt = m.JoinedAt
-		}
-		*m = *member
+	}
 
-		_m, err := msgpack.Marshal(m)
-		if err != nil {
-			log.Println(err.Error())
-		}
-		err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID, _m).Err()
-		if err != nil {
-			log.Println(err.Error())
-		}
-	} else {
+	_m, err := msgpack.Marshal(member)
+	if err != nil {
+		log.Println(err.Error())
+	}
+
+	err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID, _m).Err()
+	if err != nil {
 		log.Println(err.Error())
 	}
 
@@ -213,22 +217,6 @@ func (s *State) MemberRemove(member *Member) error {
 
 	s.Lock()
 	defer s.Unlock()
-
-	exists, err := s.Redis.Exists(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID)).Result()
-	if err != nil {
-		log.Println(err.Error())
-	}
-	if exists == 0 {
-		return ErrStateNotFound
-	}
-
-	val, err := s.Redis.HExists(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID).Result()
-	if err != nil {
-		log.Println(err.Error())
-	}
-	if !val {
-		return ErrStateNotFound
-	}
 
 	err = s.Redis.HDel(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID).Err()
 	if err != nil {
@@ -776,6 +764,16 @@ func (s *State) OnInterface(se *Session, i interface{}) (err error) {
 		}
 		guild.MemberCount++
 
+		_g, err := msgpack.Marshal(guild)
+		if err != nil {
+			log.Println(err.Error())
+		}
+
+		err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+		if err != nil {
+			log.Println(err.Error())
+		}
+
 		// Caches member if tracking is enabled.
 		if s.TrackMembers {
 			err = s.MemberAdd(t.Member)
@@ -791,6 +789,16 @@ func (s *State) OnInterface(se *Session, i interface{}) (err error) {
 			return err
 		}
 		guild.MemberCount--
+
+		_g, err := msgpack.Marshal(guild)
+		if err != nil {
+			log.Println(err.Error())
+		}
+
+		err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+		if err != nil {
+			log.Println(err.Error())
+		}
 
 		// Removes member from the cache if tracking is enabled.
 		if s.TrackMembers {
