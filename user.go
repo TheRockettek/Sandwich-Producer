@@ -17,7 +17,7 @@ type User struct {
 
 	// The token of the user. This is only present for
 	// the user represented by the current session.
-	Token string `json:"token"`
+	Token string `json:"token,omitempty" msgpack:"token,omitempty"`
 
 	// Whether the user has multi-factor authentication enabled.
 	MFAEnabled bool `json:"mfa_enabled"`

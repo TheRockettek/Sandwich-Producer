@@ -693,46 +693,6 @@ func (eh readyEventHandler) Handle(s *Session, i interface{}) {
 	}
 }
 
-// relationshipAddEventHandler is an event handler for RelationshipAdd events.
-type relationshipAddEventHandler func(*Session, *RelationshipAdd)
-
-// Type returns the event type for RelationshipAdd events.
-func (eh relationshipAddEventHandler) Type() string {
-	return relationshipAddEventType
-}
-
-// New returns a new instance of RelationshipAdd.
-func (eh relationshipAddEventHandler) New() interface{} {
-	return &RelationshipAdd{}
-}
-
-// Handle is the handler for RelationshipAdd events.
-func (eh relationshipAddEventHandler) Handle(s *Session, i interface{}) {
-	if t, ok := i.(*RelationshipAdd); ok {
-		eh(s, t)
-	}
-}
-
-// relationshipRemoveEventHandler is an event handler for RelationshipRemove events.
-type relationshipRemoveEventHandler func(*Session, *RelationshipRemove)
-
-// Type returns the event type for RelationshipRemove events.
-func (eh relationshipRemoveEventHandler) Type() string {
-	return relationshipRemoveEventType
-}
-
-// New returns a new instance of RelationshipRemove.
-func (eh relationshipRemoveEventHandler) New() interface{} {
-	return &RelationshipRemove{}
-}
-
-// Handle is the handler for RelationshipRemove events.
-func (eh relationshipRemoveEventHandler) Handle(s *Session, i interface{}) {
-	if t, ok := i.(*RelationshipRemove); ok {
-		eh(s, t)
-	}
-}
-
 // resumedEventHandler is an event handler for Resumed events.
 type resumedEventHandler func(*Session, *Resumed)
 
@@ -983,10 +943,6 @@ func handlerForInterface(handler interface{}) EventHandler {
 		return rateLimitEventHandler(v)
 	case func(*Session, *Ready):
 		return readyEventHandler(v)
-	case func(*Session, *RelationshipAdd):
-		return relationshipAddEventHandler(v)
-	case func(*Session, *RelationshipRemove):
-		return relationshipRemoveEventHandler(v)
 	case func(*Session, *Resumed):
 		return resumedEventHandler(v)
 	case func(*Session, *TypingStart):
@@ -1040,8 +996,6 @@ func init() {
 	registerInterfaceProvider(presenceUpdateEventHandler(nil))
 	registerInterfaceProvider(presencesReplaceEventHandler(nil))
 	registerInterfaceProvider(readyEventHandler(nil))
-	registerInterfaceProvider(relationshipAddEventHandler(nil))
-	registerInterfaceProvider(relationshipRemoveEventHandler(nil))
 	registerInterfaceProvider(resumedEventHandler(nil))
 	registerInterfaceProvider(typingStartEventHandler(nil))
 	registerInterfaceProvider(userGuildSettingsUpdateEventHandler(nil))

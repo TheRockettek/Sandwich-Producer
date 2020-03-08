@@ -12,6 +12,7 @@ import (
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-redis/redis"
+	"github.com/vmihailenco/msgpack"
 )
 
 /*
@@ -155,7 +156,7 @@ func (d *SessionProvider) Receive(args StartupData, c <-chan Event) {
 	pchan := args.KafkaClient.ProduceChannel()
 	maxlen := 1000000
 	for evnt := range c {
-		v, _ := json.Marshal(evnt)
+		v, _ := msgpack.Marshal(evnt)
 		if len(v) > maxlen {
 			maxlen = len(v)
 			log.Printf("Sent larger payload than before: %d", maxlen)

@@ -1,8 +1,6 @@
 package main
 
-import (
-	"encoding/json"
-)
+import "encoding/json"
 
 // This file contains all the possible structs that can be
 // handled by AddHandler/EventHandler.
@@ -26,12 +24,12 @@ type RateLimit struct {
 
 // Event provides a basic initial struct for all websocket events.
 type Event struct {
-	Operation int             `json:"op"`
-	Sequence  int64           `json:"s"`
-	Type      string          `json:"t"`
-	RawData   json.RawMessage `json:"d"`
+	Operation int             `json:"op" msgpack:"op"`
+	Sequence  int64           `json:"s" msgpack:"s"`
+	Type      string          `json:"t" msgpack:"t"`
+	RawData   json.RawMessage `json:"d" msgpack:"-"`
 	// Struct contains one of the other types in this file.
-	Struct interface{} `json:"-"`
+	Struct interface{} `json:"-" msgpack:"d"`
 }
 
 // A Ready stores all data for the websocket READY event.
@@ -42,13 +40,6 @@ type Ready struct {
 	ReadState       []*ReadState `json:"read_state"`
 	PrivateChannels []*Channel   `json:"private_channels"`
 	Guilds          []*Guild     `json:"guilds"`
-
-	// Undocumented fields
-	Settings          *Settings            `json:"user_settings"`
-	UserGuildSettings []*UserGuildSettings `json:"user_guild_settings"`
-	Relationships     []*Relationship      `json:"relationships"`
-	Presences         []*Presence          `json:"presences"`
-	Notes             map[string]string    `json:"notes"`
 }
 
 // ChannelCreate is the data for a ChannelCreate event.
@@ -199,16 +190,6 @@ type PresenceUpdate struct {
 // Resumed is the data for a Resumed event.
 type Resumed struct {
 	Trace []string `json:"_trace"`
-}
-
-// RelationshipAdd is the data for a RelationshipAdd event.
-type RelationshipAdd struct {
-	*Relationship
-}
-
-// RelationshipRemove is the data for a RelationshipRemove event.
-type RelationshipRemove struct {
-	*Relationship
 }
 
 // TypingStart is the data for a TypingStart event.
