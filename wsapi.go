@@ -477,7 +477,7 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	// Must immediately disconnect from gateway and reconnect to new gateway.
 	if e.Operation == 7 {
 		s.log(LogDebug, "Closing and reconnecting in response to Op7")
-		s.Close()
+		s.CloseWithStatus(4000)
 		s.reconnect()
 		return e, nil
 	}
@@ -666,8 +666,8 @@ func (s *Session) reconnect() {
 	}
 }
 
-// Close closes a websocket and stops all listening/heartbeat goroutines.
-func (s *Session) Close() (err error) {
+// CloseWithStatus closes a websocket with a specified status code and stops all listening/heartbeat goroutines.
+func (s *Session) CloseWithStatus(statusCode int) (err error) {
 	s.Lock()
 
 	s.DataReady = false
@@ -684,7 +684,7 @@ func (s *Session) Close() (err error) {
 		// To cleanly close a connection, a client should send a close
 		// frame and wait for the server to close the connection.
 		s.wsMutex.Lock()
-		err := s.wsConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		err := s.wsConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(statusCode, ""))
 		s.wsMutex.Unlock()
 		if err != nil {
 			s.log(LogWarning, "error closing websocket, %s", err)
@@ -703,6 +703,13 @@ func (s *Session) Close() (err error) {
 
 	s.log(LogDebug, "emit disconnect event")
 	s.handleEvent(disconnectEventType, &Disconnect{})
+
+	return
+}
+
+// Close closes a websocket and stops all listening/heartbeat goroutines.
+func (s *Session) Close() (err error) {
+	s.CloseWithStatus(websocket.CloseNormalClosure)
 
 	return
 }

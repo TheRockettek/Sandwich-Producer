@@ -201,13 +201,6 @@ func main() {
 		}
 	}()
 
-	// prefix:...
-	// guild:<>
-	// guild:<>:member:<>
-	// guild:<>:emoji:<>
-	// guild:<>:role:<>
-	// user:<>
-
 	// Matches redis keys with wildcard and clears it.
 	log.Println("Clearing redis cache")
 	res, err := redisClient.Keys(fmt.Sprintf("%s:*", data.Prefix)).Result()
