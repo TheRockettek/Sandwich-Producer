@@ -23,8 +23,8 @@
     "_cache_address": "Address of the redis handler",
     "cache_address": "localhost:6379",
 
-    "_kafka_address": "Address of kafka handler",
-    "kafka_address": "localhost:9092",
+    "_nats_address": "Address of NATS.io server",
+    "nats_address": "localhost:9092",
 
     "_database_address": "Not currently used",
     "database_address": "",

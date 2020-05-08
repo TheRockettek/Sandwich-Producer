@@ -71,10 +71,6 @@ func (s *Session) request(method, urlStr, contentType string, b []byte, bucketID
 
 // RequestWithLockedBucket makes a request using a bucket that's already been locked
 func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b []byte, bucket *Bucket, sequence int) (response []byte, err error) {
-	if s.Debug {
-		log.Printf("API REQUEST %8s :: %s\n", method, urlStr)
-		log.Printf("API REQUEST  PAYLOAD :: [%s]\n", string(b))
-	}
 
 	req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(b))
 	if err != nil {
@@ -96,12 +92,6 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 
 	// TODO: Make a configurable static variable.
 	req.Header.Set("User-Agent", s.UserAgent)
-
-	if s.Debug {
-		for k, v := range req.Header {
-			log.Printf("API REQUEST   HEADER :: [%s] = %+v\n", k, v)
-		}
-	}
 
 	resp, err := s.Client.Do(req)
 	if err != nil {
@@ -125,15 +115,6 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 		return
 	}
 
-	if s.Debug {
-
-		log.Printf("API RESPONSE  STATUS :: %s\n", resp.Status)
-		for k, v := range resp.Header {
-			log.Printf("API RESPONSE  HEADER :: [%s] = %+v\n", k, v)
-		}
-		log.Printf("API RESPONSE    BODY :: [%s]\n\n\n", response)
-	}
-
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusCreated:
@@ -141,8 +122,8 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 	case http.StatusBadGateway:
 		// Retry sending request if possible
 		if sequence < s.MaxRestRetries {
+			s.log.Info().Str("url", urlStr).Str("status", resp.Status).Msg("Failed, Retrying...")
 
-			s.log(LogInformational, "%s Failed (%s), Retrying...", urlStr, resp.Status)
 			response, err = s.RequestWithLockedBucket(method, urlStr, contentType, b, s.Ratelimiter.LockBucketObject(bucket), sequence+1)
 		} else {
 			err = fmt.Errorf("Exceeded Max retries HTTP %s, %s", resp.Status, response)
@@ -151,10 +132,11 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 		rl := TooManyRequests{}
 		err = json.Unmarshal(response, &rl)
 		if err != nil {
-			s.log(LogError, "rate limit unmarshal error, %s", err)
+			s.log.Error().Err(err).Msg("rate limit unmarshal error")
 			return
 		}
-		s.log(LogInformational, "Rate Limiting %s, retry in %d", urlStr, rl.RetryAfter)
+
+		s.log.Info().Str("url", urlStr).Dur("retry_after", rl.RetryAfter).Msg("Rate Limiting, retry")
 		s.handleEvent(rateLimitEventType, RateLimit{TooManyRequests: &rl, URL: urlStr})
 
 		time.Sleep(rl.RetryAfter * time.Millisecond)
@@ -164,7 +146,7 @@ func (s *Session) RequestWithLockedBucket(method, urlStr, contentType string, b 
 		response, err = s.RequestWithLockedBucket(method, urlStr, contentType, b, s.Ratelimiter.LockBucketObject(bucket), sequence)
 	case http.StatusUnauthorized:
 		if strings.Index(s.Token, "Bot ") != 0 {
-			s.log(LogInformational, ErrUnauthorized.Error())
+			s.log.Info().Err(ErrUnauthorized).Send()
 			err = ErrUnauthorized
 		}
 		fallthrough
@@ -411,31 +393,31 @@ func (s *Session) UserGuildSettingsEdit(guildID string, settings *UserGuildSetti
 	return
 }
 
-// UserChannelPermissions returns the permission of a user in a channel.
+// GetUserChannelPermissions returns the permission of a user in a channel.
 // userID    : The ID of the user to calculate permissions for.
 // channelID : The ID of the channel to calculate permission for.
 //
 // NOTE: This function is now deprecated and will be removed in the future.
 // Please see the same function inside state.go
-func (s *Session) UserChannelPermissions(userID, channelID string) (apermissions int, err error) {
+func (s *Session) GetUserChannelPermissions(userID, channelID string) (apermissions int, err error) {
 	// Try to just get permissions from state.
-	apermissions, err = s.State.UserChannelPermissions(userID, channelID)
+	apermissions, err = s.UserChannelPermissions(userID, channelID)
 	if err == nil {
 		return
 	}
 
 	// Otherwise try get as much data from state as possible, falling back to the network.
-	channel, err := s.State.Channel(channelID)
+	channel, err := s.GetChannel(channelID)
 	if err != nil || channel == nil {
-		channel, err = s.Channel(channelID)
+		channel, err = s.GetChannel(channelID)
 		if err != nil {
 			return
 		}
 	}
 
-	guild, err := s.State.Guild(channel.GuildID)
+	guild, err := s.FetchGuild(channel.GuildID)
 	if err != nil || guild == nil {
-		guild, err = s.Guild(channel.GuildID)
+		guild, err = s.FetchGuild(channel.GuildID)
 		if err != nil {
 			return
 		}
@@ -446,7 +428,7 @@ func (s *Session) UserChannelPermissions(userID, channelID string) (apermissions
 		return
 	}
 
-	member, err := s.State.Member(guild.ID, userID)
+	member, err := s.GetMember(guild.ID, userID)
 	if err != nil || member == nil {
 		member, err = s.GuildMember(guild.ID, userID)
 		if err != nil {
@@ -532,15 +514,13 @@ func memberPermissions(guild *Guild, channel *Channel, member *Member) (apermiss
 // Functions specific to Discord Guilds
 // ------------------------------------------------------------------------------------------------
 
-// Guild returns a Guild structure of a specific Guild.
+// FetchGuild returns a Guild structure of a specific Guild.
 // guildID   : The ID of a Guild
-func (s *Session) Guild(guildID string) (st *Guild, err error) {
-	if s.StateEnabled {
-		// Attempt to grab the guild from State first.
-		st, err = s.State.Guild(guildID)
-		if err == nil && !st.Unavailable {
-			return
-		}
+func (s *Session) FetchGuild(guildID string) (st *Guild, err error) {
+	// Attempt to grab the guild from State first.
+	st, err = s.GetGuild(guildID)
+	if err == nil && !st.Unavailable {
+		return
 	}
 
 	body, err := s.RequestWithBucketID("GET", EndpointGuild(guildID), nil, EndpointGuild(guildID))
@@ -1167,7 +1147,7 @@ func (s *Session) GuildIntegrationSync(guildID, integrationID string) (err error
 // GuildIcon returns an image.Image of a guild icon.
 // guildID   : The ID of a Guild.
 func (s *Session) GuildIcon(guildID string) (img image.Image, err error) {
-	g, err := s.Guild(guildID)
+	g, err := s.FetchGuild(guildID)
 	if err != nil {
 		return
 	}
@@ -1189,7 +1169,7 @@ func (s *Session) GuildIcon(guildID string) (img image.Image, err error) {
 // GuildSplash returns an image.Image of a guild splash image.
 // guildID   : The ID of a Guild.
 func (s *Session) GuildSplash(guildID string) (img image.Image, err error) {
-	g, err := s.Guild(guildID)
+	g, err := s.FetchGuild(guildID)
 	if err != nil {
 		return
 	}

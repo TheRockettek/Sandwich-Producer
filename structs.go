@@ -19,14 +19,65 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog"
+
+	"github.com/go-redis/redis"
 	"github.com/gorilla/websocket"
+	"gopkg.in/rethinkdb/rethinkdb-go.v6"
 )
+
+// Connections defines any third part clients that are used
+// or used by states in general
+type Connections struct {
+	RedisClient   *redis.Client
+	RedisPrefix   string
+	RethinkClient *rethinkdb.Session
+
+	IgnoredEvents  []string
+	EventBlacklist []string
+}
+
+// Configuration defines the variables that will be used
+// for configs. In future will be loading from the manager.
+type Configuration struct {
+	// Identification is used so consumers can handle many
+	// different producers at once.
+	Identity string `json:"identity"`
+	Token    string `json:"token"`
+	Prefix   string `json:"prefix"`
+
+	// If autosharded is false, a shard count must be provided.
+	// shard_count is ignored if autosharded has been enabled.
+	Autosharded bool  `json:"is_autosharded"`
+	ShardCount  int   `json:"shard_count"`
+	ShardIDs    []int `json:"shard_ids"`
+
+	// Cache address should be for redis.
+	// Database address should be for rethinkdb.
+	NatsAddress string `json:"nats_address"`
+	NatsCluster string `json:"nats_cluster"`
+	NatsQueue   string `json:"nats_queue"`
+	NatsChannel string `json:"nats_channel"`
+
+	CacheAddress    string `json:"cache_address"`
+	ManagerAddress  string `json:"manager_address"`
+	DatabaseAddress string `json:"database_address"`
+
+	// Events that are completely ignored (from caching or distribution)
+	EventBlacklist []string `json:"event_blacklist"`
+
+	// Events which are sent to cache but not distributed
+	IgnoredEvents []string `json:"ignored_events"`
+
+	connections Connections
+}
 
 // SessionProvider is the service provider for the different sessions.
 type SessionProvider struct {
 	args         []interface{}
 	eventChannel chan Event
-	config       StartupData
+	config       Configuration
+	log          zerolog.Logger
 
 	AppSession    *Session
 	AppSessions   []*Session
@@ -53,10 +104,6 @@ type Session struct {
 	Token string
 	MFA   bool
 
-	// Debug for printing JSON request/responses
-	Debug    bool // Deprecated, will be removed.
-	LogLevel int
-
 	// Should the session reconnect the websocket on errors.
 	ShouldReconnectOnError bool
 
@@ -79,7 +126,7 @@ type Session struct {
 	// Exposed but should not be modified by User.
 
 	// Whether the Data Websocket is ready
-	DataReady bool // NOTE: Maye be deprecated soon
+	IsReady bool
 
 	// Max number of REST API retries
 	MaxRestRetries int
@@ -87,19 +134,6 @@ type Session struct {
 	// Status stores the currect status of the websocket connection
 	// this is being tested, may stay, may go away.
 	status int32
-
-	// Whether the Voice Websocket is ready
-	VoiceReady bool // NOTE: Deprecated.
-
-	// Whether the UDP Connection is ready
-	UDPReady bool // NOTE: Deprecated
-
-	// Stores a mapping of guild id's to VoiceConnections
-	VoiceConnections map[string]*VoiceConnection
-
-	// Managed state object, updated internally with events when
-	// StateEnabled is true.
-	State *State
 
 	// The http client used for REST requests
 	Client *http.Client
@@ -143,10 +177,16 @@ type Session struct {
 	EventChannel chan Event
 
 	// boolean denoting if the session is ready
-	ready bool
+	Ready *Ready
 
-	// used to store sandwich config
-	SandwichConfig StartupData
+	// dictate ammount of messages stored in cache
+	MaxMessageCount int
+
+	connections   Connections
+	configuration Configuration
+
+	// Logging interface
+	log zerolog.Logger
 }
 
 // UserConnection is a Connection returned from the UserConnections endpoint

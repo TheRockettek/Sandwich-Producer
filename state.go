@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"sync"
 
 	"github.com/go-redis/redis"
 	"github.com/vmihailenco/msgpack"
@@ -30,128 +29,118 @@ var ErrNilState = errors.New("state not instantiated, please use discordgo.New()
 // requested is not found
 var ErrStateNotFound = errors.New("state cache not found")
 
-// A State contains the current known state.
-// As discord sends this in a READY blob, it seems reasonable to simply
-// use that struct as the data store.
-type State struct {
-	sync.RWMutex
-	Ready
-
-	// Store the Redis Instance
-	Redis       *redis.Client
-	RedisPrefix string
-
-	// MaxMessageCount represents how many messages per channel the state will store.
-	MaxMessageCount int
-	TrackChannels   bool
-	TrackEmojis     bool
-	TrackMembers    bool
-	TrackRoles      bool
-	TrackPresences  bool
-}
-
-// NewState creates an empty state.
-func NewState() *State {
-	return &State{
-		TrackChannels:  true,
-		TrackEmojis:    true,
-		TrackMembers:   true,
-		TrackRoles:     true,
-		TrackPresences: true,
-	}
-}
-
-func (s *State) createMemberMap(guild *Guild) {
+func (s *Session) createMemberMap(guild *Guild) {
 	values := make(map[string]interface{})
 	for _, m := range guild.Members {
 		_m, err := msgpack.Marshal(m)
 		if err != nil {
-			log.Println(err.Error())
+			s.log.Error().Err(err).Msg("failed to marshal member")
+			continue
 		}
 		values[m.User.ID] = _m
 	}
-	s.Redis.HMSet(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), values)
+	s.connections.RedisClient.HMSet(fmt.Sprintf("%s:guild:%s:members", s.connections.RedisPrefix, guild.ID), values)
 }
 
 // GuildAdd adds a guild to the current world state, or
 // updates it if it already exists.
-func (s *State) GuildAdd(guild *Guild) error {
+func (s *Session) GuildAdd(guild *Guild) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	var err error
 
-	// Update the channels to point to the right guild, adding them to the channelMap as we go
-	values := make(map[string]interface{})
-	for _, c := range guild.Channels {
-		_c, err := msgpack.Marshal(c)
-		if err != nil {
-			log.Println(err.Error())
-		}
-		values[c.ID] = _c
-	}
+	// s.Lock()
+	// defer s.Unlock()
 
-	// Check if guild has channels unless error will return
-	if len(values) > 0 {
-		err := s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, guild.ID), values).Err()
+	marshalGuild := s.MarshalGuild(guild)
+
+	if len(marshalGuild.Channels) > 0 {
+		err = s.connections.RedisClient.HMSet(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), marshalGuild.ChannelValues).Err()
 		if err != nil {
-			log.Println(err.Error())
+			s.log.Error().Err(err).Str("id", guild.ID).Msg("failed to add guild channels on guild channel store")
 		}
 	}
 
-	_g, err := msgpack.Marshal(guild)
+	if len(marshalGuild.Roles) > 0 {
+		err = s.connections.RedisClient.HMSet(fmt.Sprintf("%s:roles", s.connections.RedisPrefix), marshalGuild.RoleValues).Err()
+		if err != nil {
+			s.log.Error().Err(err).Str("id", guild.ID).Msg("failed to add guild roles on guild roles store")
+		}
+	}
+
+	if len(marshalGuild.Emojis) > 0 {
+		err = s.connections.RedisClient.HMSet(fmt.Sprintf("%s:emojis", s.connections.RedisPrefix), marshalGuild.EmojiValues).Err()
+		if err != nil {
+			s.log.Error().Err(err).Str("id", guild.ID).Msg("failed to add guild emojis on guild emojis store")
+		}
+	}
+
+	_g, err := msgpack.Marshal(marshalGuild)
 	if err != nil {
 		log.Println(err.Error())
 	}
-
-	err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+	err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild", s.connections.RedisPrefix), marshalGuild.ID, _g).Err()
 	if err != nil {
-		log.Println(err.Error())
+		s.log.Error().Err(err).Str("id", marshalGuild.ID).Msg("failed to add guild to guild store")
 	}
 
 	return nil
 }
 
 // GuildRemove removes a guild from current world state.
-func (s *State) GuildRemove(guild *Guild) error {
+func (s *Session) GuildRemove(guild *Guild) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
 	// Remove guild channels from global cache
 	for _, c := range guild.Channels {
-		err := s.Redis.HDel(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID).Err()
+		err := s.connections.RedisClient.HDel(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), c.ID).Err()
 		if err != nil {
-			log.Println(err.Error())
+			s.log.Error().Err(err).Str("id", c.ID).Msg("failed to remove channel from channel store")
 		}
 	}
 
-	err := s.Redis.HDel(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID).Err()
+	for _, r := range guild.Roles {
+		err := s.connections.RedisClient.HDel(fmt.Sprintf("%s:roles", s.connections.RedisPrefix), r.ID).Err()
+		if err != nil {
+			s.log.Error().Err(err).Str("id", r.ID).Msg("failed to remove role from role store")
+		}
+	}
+
+	for _, e := range guild.Emojis {
+		err := s.connections.RedisClient.HDel(fmt.Sprintf("%s:emojis", s.connections.RedisPrefix), e.ID).Err()
+		if err != nil {
+			s.log.Error().Err(err).Str("id", e.ID).Msg("failed to remove emoji from emoji store")
+		}
+	}
+
+	err := s.connections.RedisClient.HDel(fmt.Sprintf("%s:guild", s.connections.RedisPrefix), guild.ID).Err()
 	if err != nil {
-		log.Println(err.Error())
+		s.log.Error().Err(err).Str("id", guild.ID).Msg("failed to remove guild from guild store")
 	}
 
 	return nil
 }
 
-// Guild gets a guild by ID.
+// GetGuild gets a guild by ID.
 // Useful for querying if @me is in a guild:
 //     _, err := discordgo.Session.State.Guild(guildID)
 //     isInGuild := err == nil
-func (s *State) Guild(guildID string) (*Guild, error) {
+func (s *Session) GetGuild(guildID string) (*Guild, error) {
 	if s == nil {
 		return nil, ErrNilState
 	}
 
-	s.RLock()
-	defer s.RUnlock()
+	// s.RLock()
+	// defer s.RUnlock()
 
-	val, err := s.Redis.HGet(fmt.Sprintf("%s:guild", s.RedisPrefix), guildID).Result()
+	val, err := s.connections.RedisClient.HGet(fmt.Sprintf("%s:guild", s.connections.RedisPrefix), guildID).Result()
 	if err != redis.Nil {
 		var g *Guild
 		msgpack.Unmarshal([]byte(val), &g)
@@ -164,22 +153,22 @@ func (s *State) Guild(guildID string) (*Guild, error) {
 
 // MemberAdd adds a member to the current world state, or
 // updates it if it already exists.
-func (s *State) MemberAdd(member *Member) error {
+func (s *Session) MemberAdd(member *Member) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	guild, err := s.Guild(member.GuildID)
+	guild, err := s.GetGuild(member.GuildID)
 	if err != nil {
 		return err
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
-	// s.Redis.HMSet(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), values)
+	// s.connections.RedisClient.HMSet(fmt.Sprintf("%s:guild:%s:members", s.connections.RedisPrefix, guild.ID), values)
 
-	val, err := s.Redis.HGet(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID).Result()
+	val, err := s.connections.RedisClient.HGet(fmt.Sprintf("%s:guild:%s:members", s.connections.RedisPrefix, guild.ID), member.User.ID).Result()
 
 	if err == redis.Nil || err == nil {
 		var m *Member
@@ -197,7 +186,7 @@ func (s *State) MemberAdd(member *Member) error {
 		log.Println(err.Error())
 	}
 
-	err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID, _m).Err()
+	err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild:%s:members", s.connections.RedisPrefix, guild.ID), member.User.ID, _m).Err()
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -206,20 +195,20 @@ func (s *State) MemberAdd(member *Member) error {
 }
 
 // MemberRemove removes a member from current world state.
-func (s *State) MemberRemove(member *Member) error {
+func (s *Session) MemberRemove(member *Member) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	guild, err := s.Guild(member.GuildID)
+	guild, err := s.GetGuild(member.GuildID)
 	if err != nil {
 		return err
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
-	err = s.Redis.HDel(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guild.ID), member.User.ID).Err()
+	err = s.connections.RedisClient.HDel(fmt.Sprintf("%s:guild:%s:members", s.connections.RedisPrefix, guild.ID), member.User.ID).Err()
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -227,16 +216,16 @@ func (s *State) MemberRemove(member *Member) error {
 	return nil
 }
 
-// Member gets a member by ID from a guild.
-func (s *State) Member(guildID, userID string) (*Member, error) {
+// GetMember gets a member by ID from a guild.
+func (s *Session) GetMember(guildID, userID string) (*Member, error) {
 	if s == nil {
 		return nil, ErrNilState
 	}
 
-	s.RLock()
-	defer s.RUnlock()
+	// s.RLock()
+	// defer s.RUnlock()
 
-	val, err := s.Redis.HGet(fmt.Sprintf("%s:guild:%s:members", s.RedisPrefix, guildID), userID).Result()
+	val, err := s.connections.RedisClient.HGet(fmt.Sprintf("%s:guild:%s:members", s.connections.RedisPrefix, guildID), userID).Result()
 	if err == redis.Nil {
 		return nil, ErrStateNotFound
 	}
@@ -252,18 +241,18 @@ func (s *State) Member(guildID, userID string) (*Member, error) {
 
 // RoleAdd adds a role to the current world state, or
 // updates it if it already exists.
-func (s *State) RoleAdd(guildID string, role *Role) error {
+func (s *Session) RoleAdd(guildID string, role *Role) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	guild, err := s.Guild(guildID)
+	guild, err := s.GetGuild(guildID)
 	if err != nil {
 		return err
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
 	for i, r := range guild.Roles {
 		if r.ID == role.ID {
@@ -279,7 +268,7 @@ func (s *State) RoleAdd(guildID string, role *Role) error {
 		log.Println(err.Error())
 	}
 
-	err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+	err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild", s.connections.RedisPrefix), guild.ID, _g).Err()
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -288,18 +277,18 @@ func (s *State) RoleAdd(guildID string, role *Role) error {
 }
 
 // RoleRemove removes a role from current world state by ID.
-func (s *State) RoleRemove(guildID, roleID string) error {
+func (s *Session) RoleRemove(guildID, roleID string) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	guild, err := s.Guild(guildID)
+	guild, err := s.GetGuild(guildID)
 	if err != nil {
 		return err
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
 	for i, r := range guild.Roles {
 		if r.ID == roleID {
@@ -313,7 +302,7 @@ func (s *State) RoleRemove(guildID, roleID string) error {
 		log.Println(err.Error())
 	}
 
-	err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+	err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild", s.connections.RedisPrefix), guild.ID, _g).Err()
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -321,19 +310,19 @@ func (s *State) RoleRemove(guildID, roleID string) error {
 	return ErrStateNotFound
 }
 
-// Role gets a role by ID from a guild.
-func (s *State) Role(guildID, roleID string) (*Role, error) {
+// GetRole gets a role by ID from a guild.
+func (s *Session) GetRole(guildID, roleID string) (*Role, error) {
 	if s == nil {
 		return nil, ErrNilState
 	}
 
-	guild, err := s.Guild(guildID)
+	guild, err := s.GetGuild(guildID)
 	if err != nil {
 		return nil, err
 	}
 
-	s.RLock()
-	defer s.RUnlock()
+	// s.RLock()
+	// defer s.RUnlock()
 
 	for _, r := range guild.Roles {
 		if r.ID == roleID {
@@ -348,15 +337,15 @@ func (s *State) Role(guildID, roleID string) (*Role, error) {
 // updates it if it already exists.
 // Channels may exist either as PrivateChannels or inside
 // a guild.
-func (s *State) ChannelAdd(channel *Channel) error {
+func (s *Session) ChannelAdd(channel *Channel) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
-	val, err := s.Redis.HGet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, channel.GuildID), channel.ID).Result()
+	val, err := s.connections.RedisClient.HGet(fmt.Sprintf("%s:guild:%s:channels", s.connections.RedisPrefix, channel.GuildID), channel.ID).Result()
 
 	if err == redis.Nil || err == nil {
 		var c *Channel
@@ -377,11 +366,11 @@ func (s *State) ChannelAdd(channel *Channel) error {
 		if err != nil {
 			log.Println(err.Error())
 		}
-		err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, "priv"), channel.ID, _c).Err()
+		err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild:%s:channels", s.connections.RedisPrefix, "priv"), channel.ID, _c).Err()
 		if err != nil {
 			log.Println(err.Error())
 		}
-		err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), channel.ID, _c).Err()
+		err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), channel.ID, _c).Err()
 		if err != nil {
 			log.Println(err.Error())
 		}
@@ -390,11 +379,11 @@ func (s *State) ChannelAdd(channel *Channel) error {
 		if err != nil {
 			log.Println(err.Error())
 		}
-		err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, channel.GuildID), channel.ID, _c).Err()
+		err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild:%s:channels", s.connections.RedisPrefix, channel.GuildID), channel.ID, _c).Err()
 		if err != nil {
 			log.Println(err.Error())
 		}
-		err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), channel.ID, _c).Err()
+		err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), channel.ID, _c).Err()
 		if err != nil {
 			log.Println(err.Error())
 		}
@@ -404,35 +393,35 @@ func (s *State) ChannelAdd(channel *Channel) error {
 }
 
 // ChannelRemove removes a channel from current world state.
-func (s *State) ChannelRemove(channel *Channel) error {
+func (s *Session) ChannelRemove(channel *Channel) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	_, err := s.Channel(channel.ID)
+	_, err := s.GetChannel(channel.ID)
 	if err != nil {
 		return err
 	}
 
 	if channel.Type == ChannelTypeDM || channel.Type == ChannelTypeGroupDM {
-		s.Lock()
-		defer s.Unlock()
+		// s.Lock()
+		// defer s.Unlock()
 
-		err := s.Redis.HDel(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, "priv"), channel.ID).Err()
+		err := s.connections.RedisClient.HDel(fmt.Sprintf("%s:guild:%s:channels", s.connections.RedisPrefix, "priv"), channel.ID).Err()
 		if err != nil {
 			log.Println(err.Error())
 		}
 	} else {
-		s.Lock()
-		defer s.Unlock()
+		// s.Lock()
+		// defer s.Unlock()
 
-		err := s.Redis.HDel(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, channel.GuildID), channel.ID).Err()
+		err := s.connections.RedisClient.HDel(fmt.Sprintf("%s:guild:%s:channels", s.connections.RedisPrefix, channel.GuildID), channel.ID).Err()
 		if err != nil {
 			log.Println(err.Error())
 		}
 	}
 
-	err = s.Redis.HDel(fmt.Sprintf("%s:channels", s.RedisPrefix), channel.ID).Err()
+	err = s.connections.RedisClient.HDel(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), channel.ID).Err()
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -442,26 +431,26 @@ func (s *State) ChannelRemove(channel *Channel) error {
 
 // GuildChannel gets a channel by ID from a guild.
 // This method is Deprecated, use Channel(channelID)
-func (s *State) GuildChannel(guildID, channelID string) (*Channel, error) {
-	return s.Channel(channelID)
+func (s *Session) GuildChannel(guildID, channelID string) (*Channel, error) {
+	return s.GetChannel(channelID)
 }
 
 // PrivateChannel gets a private channel by ID.
 // This method is Deprecated, use Channel(channelID)
-func (s *State) PrivateChannel(channelID string) (*Channel, error) {
-	return s.Channel(channelID)
+func (s *Session) PrivateChannel(channelID string) (*Channel, error) {
+	return s.GetChannel(channelID)
 }
 
-// Channel gets a channel by ID, it will look in all guilds and private channels.
-func (s *State) Channel(channelID string) (*Channel, error) {
+// GetChannel gets a channel by ID, it will look in all guilds and private channels.
+func (s *Session) GetChannel(channelID string) (*Channel, error) {
 	if s == nil {
 		return nil, ErrNilState
 	}
 
-	s.RLock()
-	defer s.RUnlock()
+	// s.RLock()
+	// defer s.RUnlock()
 
-	val, err := s.Redis.HGet(fmt.Sprintf("%s:channels", s.RedisPrefix), channelID).Result()
+	val, err := s.connections.RedisClient.HGet(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), channelID).Result()
 
 	if err == nil {
 		var c *Channel
@@ -472,19 +461,19 @@ func (s *State) Channel(channelID string) (*Channel, error) {
 	return nil, ErrStateNotFound
 }
 
-// Emoji returns an emoji for a guild and emoji id.
-func (s *State) Emoji(guildID, emojiID string) (*Emoji, error) {
+// GetEmoji returns an emoji for a guild and emoji id.
+func (s *Session) GetEmoji(guildID, emojiID string) (*Emoji, error) {
 	if s == nil {
 		return nil, ErrNilState
 	}
 
-	guild, err := s.Guild(guildID)
+	guild, err := s.GetGuild(guildID)
 	if err != nil {
 		return nil, err
 	}
 
-	s.RLock()
-	defer s.RUnlock()
+	// s.RLock()
+	// defer s.RUnlock()
 
 	for _, e := range guild.Emojis {
 		if e.ID == emojiID {
@@ -496,18 +485,18 @@ func (s *State) Emoji(guildID, emojiID string) (*Emoji, error) {
 }
 
 // EmojiAdd adds an emoji to the current world state.
-func (s *State) EmojiAdd(guildID string, emoji *Emoji) error {
+func (s *Session) EmojiAdd(guildID string, emoji *Emoji) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	guild, err := s.Guild(guildID)
+	guild, err := s.GetGuild(guildID)
 	if err != nil {
 		return err
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
 	for i, e := range guild.Emojis {
 		if e.ID == emoji.ID {
@@ -523,7 +512,7 @@ func (s *State) EmojiAdd(guildID string, emoji *Emoji) error {
 		log.Println(err.Error())
 	}
 
-	err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
+	err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild", s.connections.RedisPrefix), guild.ID, _g).Err()
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -532,7 +521,7 @@ func (s *State) EmojiAdd(guildID string, emoji *Emoji) error {
 }
 
 // EmojisAdd adds multiple emojis to the world state.
-func (s *State) EmojisAdd(guildID string, emojis []*Emoji) error {
+func (s *Session) EmojisAdd(guildID string, emojis []*Emoji) error {
 	for _, e := range emojis {
 		if err := s.EmojiAdd(guildID, e); err != nil {
 			return err
@@ -544,18 +533,18 @@ func (s *State) EmojisAdd(guildID string, emojis []*Emoji) error {
 // MessageAdd adds a message to the current world state, or updates it if it exists.
 // If the channel cannot be found, the message is discarded.
 // Messages are kept in state up to s.MaxMessageCount per channel.
-func (s *State) MessageAdd(message *Message) error {
+func (s *Session) MessageAdd(message *Message) error {
 	if s == nil {
 		return ErrNilState
 	}
 
-	c, err := s.Channel(message.ChannelID)
+	c, err := s.GetChannel(message.ChannelID)
 	if err != nil {
 		return err
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
 	// If the message exists, merge in the new message contents.
 	for _, m := range c.Messages {
@@ -597,12 +586,12 @@ func (s *State) MessageAdd(message *Message) error {
 		log.Println(err.Error())
 	}
 
-	err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, c.GuildID), c.ID, _c).Err()
+	err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild:%s:channels", s.connections.RedisPrefix, c.GuildID), c.ID, _c).Err()
 	if err != nil {
 		log.Println(err.Error())
 	}
 
-	err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID, _c).Err()
+	err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), c.ID, _c).Err()
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -611,7 +600,7 @@ func (s *State) MessageAdd(message *Message) error {
 }
 
 // MessageRemove removes a message from the world state.
-func (s *State) MessageRemove(message *Message) error {
+func (s *Session) MessageRemove(message *Message) error {
 	if s == nil {
 		return ErrNilState
 	}
@@ -620,14 +609,14 @@ func (s *State) MessageRemove(message *Message) error {
 }
 
 // messageRemoveByID removes a message by channelID and messageID from the world state.
-func (s *State) messageRemoveByID(channelID, messageID string) error {
-	c, err := s.Channel(channelID)
+func (s *Session) messageRemoveByID(channelID, messageID string) error {
+	c, err := s.GetChannel(channelID)
 	if err != nil {
 		return err
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
 	for i, m := range c.Messages {
 		if m.ID == messageID {
@@ -638,12 +627,12 @@ func (s *State) messageRemoveByID(channelID, messageID string) error {
 				log.Println(err.Error())
 			}
 
-			err = s.Redis.HSet(fmt.Sprintf("%s:guild:%s:channels", s.RedisPrefix, c.GuildID), c.ID, _c).Err()
+			err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild:%s:channels", s.connections.RedisPrefix, c.GuildID), c.ID, _c).Err()
 			if err != nil {
 				log.Println(err.Error())
 			}
 
-			err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID, _c).Err()
+			err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), c.ID, _c).Err()
 			if err != nil {
 				log.Println(err.Error())
 			}
@@ -653,19 +642,19 @@ func (s *State) messageRemoveByID(channelID, messageID string) error {
 	return ErrStateNotFound
 }
 
-// Message gets a message by channel and message ID.
-func (s *State) Message(channelID, messageID string) (*Message, error) {
+// GetMessage gets a message by channel and message ID.
+func (s *Session) GetMessage(channelID, messageID string) (*Message, error) {
 	if s == nil {
 		return nil, ErrNilState
 	}
 
-	c, err := s.Channel(channelID)
+	c, err := s.GetChannel(channelID)
 	if err != nil {
 		return nil, err
 	}
 
-	s.RLock()
-	defer s.RUnlock()
+	// s.RLock()
+	// defer s.RUnlock()
 
 	for _, m := range c.Messages {
 		if m.ID == messageID {
@@ -677,56 +666,44 @@ func (s *State) Message(channelID, messageID string) (*Message, error) {
 }
 
 // OnReady takes a Ready event and updates all internal state.
-func (s *State) onReady(se *Session, r *Ready) (err error) {
+func (s *Session) onReady(r *Ready) (err error) {
 	if s == nil {
 		return ErrNilState
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	// s.Lock()
+	// defer s.Unlock()
 
-	// We must track at least the current user for Voice, even
-	// if state is disabled, store the bare essentials.
-	if !se.StateEnabled {
-		ready := Ready{
-			Version:   r.Version,
-			SessionID: r.SessionID,
-			User:      r.User,
-		}
+	s.sessionID = r.SessionID
+	s.Ready = r
+	s.IsReady = true
 
-		s.Ready = ready
+	// for _, g := range s.Guilds {
 
-		return nil
-	}
+	// 	_g, err := msgpack.Marshal(g)
+	// 	if err != nil {
+	// 		log.Println(err.Error())
+	// 	}
 
-	s.Ready = *r
+	// 	s.createMemberMap(g)
 
-	for _, g := range s.Guilds {
+	// 	err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:guild", s.connections.RedisPrefix), g.ID, _g).Err()
+	// 	if err != nil {
+	// 		log.Println(err.Error())
+	// 	}
 
-		_g, err := msgpack.Marshal(g)
-		if err != nil {
-			log.Println(err.Error())
-		}
+	// 	for _, c := range g.Channels {
+	// 		_c, err := msgpack.Marshal(c)
+	// 		err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), c.ID, _c).Err()
+	// 		if err != nil {
+	// 			log.Println(err.Error())
+	// 		}
+	// 	}
+	// }
 
-		s.createMemberMap(g)
-
-		err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), g.ID, _g).Err()
-		if err != nil {
-			log.Println(err.Error())
-		}
-
-		for _, c := range g.Channels {
-			_c, err := msgpack.Marshal(c)
-			err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID, _c).Err()
-			if err != nil {
-				log.Println(err.Error())
-			}
-		}
-	}
-
-	for _, c := range s.PrivateChannels {
+	for _, c := range s.Ready.PrivateChannels {
 		_c, err := msgpack.Marshal(c)
-		err = s.Redis.HSet(fmt.Sprintf("%s:channels", s.RedisPrefix), c.ID, _c).Err()
+		err = s.connections.RedisClient.HSet(fmt.Sprintf("%s:channels", s.connections.RedisPrefix), c.ID, _c).Err()
 		if err != nil {
 			log.Println(err.Error())
 		}
@@ -736,20 +713,19 @@ func (s *State) onReady(se *Session, r *Ready) (err error) {
 }
 
 // OnInterface handles all events related to states.
-func (s *State) OnInterface(se *Session, i interface{}) (err error) {
+func (s *Session) OnInterface(i interface{}) (err error) {
 	if s == nil {
 		return ErrNilState
 	}
 
 	r, ok := i.(*Ready)
 	if ok {
-		return s.onReady(se, r)
+		return s.onReady(r)
 	}
 
-	if !se.StateEnabled {
+	if !s.StateEnabled {
 		return nil
 	}
-
 	switch t := i.(type) {
 	case *GuildCreate:
 		err = s.GuildAdd(t.Guild)
@@ -759,87 +735,44 @@ func (s *State) OnInterface(se *Session, i interface{}) (err error) {
 		err = s.GuildRemove(t.Guild)
 	case *GuildMemberAdd:
 		// Updates the MemberCount of the guild.
-		guild, err := s.Guild(t.Member.GuildID)
+		guild, err := s.GetGuild(t.Member.GuildID)
 		if err != nil {
 			return err
 		}
 		guild.MemberCount++
 
-		_g, err := msgpack.Marshal(guild)
-		if err != nil {
-			log.Println(err.Error())
-		}
-
-		err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
-		if err != nil {
-			log.Println(err.Error())
-		}
-
 		// Caches member if tracking is enabled.
-		if s.TrackMembers {
-			err = s.MemberAdd(t.Member)
-		}
+		err = s.MemberAdd(t.Member)
 	case *GuildMemberUpdate:
-		if s.TrackMembers {
-			err = s.MemberAdd(t.Member)
-		}
+		err = s.MemberAdd(t.Member)
 	case *GuildMemberRemove:
 		// Updates the MemberCount of the guild.
-		guild, err := s.Guild(t.Member.GuildID)
+		guild, err := s.GetGuild(t.Member.GuildID)
 		if err != nil {
 			return err
 		}
 		guild.MemberCount--
 
-		_g, err := msgpack.Marshal(guild)
-		if err != nil {
-			log.Println(err.Error())
-		}
-
-		err = s.Redis.HSet(fmt.Sprintf("%s:guild", s.RedisPrefix), guild.ID, _g).Err()
-		if err != nil {
-			log.Println(err.Error())
-		}
-
-		// Removes member from the cache if tracking is enabled.
-		if s.TrackMembers {
-			err = s.MemberRemove(t.Member)
-		}
+		err = s.MemberRemove(t.Member)
 	case *GuildMembersChunk:
-		if s.TrackMembers {
-			for i := range t.Members {
-				t.Members[i].GuildID = t.GuildID
-				err = s.MemberAdd(t.Members[i])
-			}
+		for i := range t.Members {
+			t.Members[i].GuildID = t.GuildID
+			err = s.MemberAdd(t.Members[i])
 		}
 	case *GuildRoleCreate:
-		if s.TrackRoles {
-			err = s.RoleAdd(t.GuildID, t.Role)
-		}
+		err = s.RoleAdd(t.GuildID, t.Role)
 	case *GuildRoleUpdate:
-		if s.TrackRoles {
-			err = s.RoleAdd(t.GuildID, t.Role)
-		}
+		err = s.RoleAdd(t.GuildID, t.Role)
 	case *GuildRoleDelete:
-		if s.TrackRoles {
-			err = s.RoleRemove(t.GuildID, t.RoleID)
-		}
+		err = s.RoleRemove(t.GuildID, t.RoleID)
 	case *GuildEmojisUpdate:
-		if s.TrackEmojis {
-			err = s.EmojisAdd(t.GuildID, t.Emojis)
-		}
+		err = s.EmojisAdd(t.GuildID, t.Emojis)
 	case *ChannelCreate:
-		if s.TrackChannels {
-			err = s.ChannelAdd(t.Channel)
-		}
+		err = s.ChannelAdd(t.Channel)
 	case *ChannelUpdate:
-		if s.TrackChannels {
-			err = s.ChannelAdd(t.Channel)
-		}
+		err = s.ChannelAdd(t.Channel)
 	case *ChannelDelete:
-		if s.TrackChannels {
-			err = s.ChannelRemove(t.Channel)
-		}
+		err = s.ChannelRemove(t.Channel)
 	case *MessageCreate:
 		if s.MaxMessageCount != 0 {
 			err = s.MessageAdd(t.Message)
@@ -847,7 +780,7 @@ func (s *State) OnInterface(se *Session, i interface{}) (err error) {
 	case *MessageUpdate:
 		if s.MaxMessageCount != 0 {
 			var old *Message
-			old, err = s.Message(t.ChannelID, t.ID)
+			old, err = s.GetMessage(t.ChannelID, t.ID)
 			if err == nil {
 				oldCopy := *old
 				t.BeforeUpdate = &oldCopy
@@ -865,42 +798,6 @@ func (s *State) OnInterface(se *Session, i interface{}) (err error) {
 				s.messageRemoveByID(t.ChannelID, mID)
 			}
 		}
-	case *PresenceUpdate:
-		if s.TrackMembers {
-			if t.Status == StatusOffline {
-				return
-			}
-
-			var m *Member
-			m, err = s.Member(t.GuildID, t.User.ID)
-
-			if err != nil {
-				// Member not found; this is a user coming online
-				m = &Member{
-					GuildID: t.GuildID,
-					Nick:    t.Nick,
-					User:    t.User,
-					Roles:   t.Roles,
-				}
-
-			} else {
-
-				if t.Nick != "" {
-					m.Nick = t.Nick
-				}
-
-				if t.User.Username != "" {
-					m.User.Username = t.User.Username
-				}
-
-				// PresenceUpdates always contain a list of roles, so there's no need to check for an empty list here
-				m.Roles = t.Roles
-
-			}
-
-			err = s.MemberAdd(m)
-		}
-
 	}
 
 	return
@@ -909,17 +806,17 @@ func (s *State) OnInterface(se *Session, i interface{}) (err error) {
 // UserChannelPermissions returns the permission of a user in a channel.
 // userID    : The ID of the user to calculate permissions for.
 // channelID : The ID of the channel to calculate permission for.
-func (s *State) UserChannelPermissions(userID, channelID string) (apermissions int, err error) {
+func (s *Session) UserChannelPermissions(userID, channelID string) (apermissions int, err error) {
 	if s == nil {
 		return 0, ErrNilState
 	}
 
-	channel, err := s.Channel(channelID)
+	channel, err := s.GetChannel(channelID)
 	if err != nil {
 		return
 	}
 
-	guild, err := s.Guild(channel.GuildID)
+	guild, err := s.GetGuild(channel.GuildID)
 	if err != nil {
 		return
 	}
@@ -929,7 +826,7 @@ func (s *State) UserChannelPermissions(userID, channelID string) (apermissions i
 		return
 	}
 
-	member, err := s.Member(guild.ID, userID)
+	member, err := s.GetMember(guild.ID, userID)
 	if err != nil {
 		return
 	}
@@ -942,22 +839,22 @@ func (s *State) UserChannelPermissions(userID, channelID string) (apermissions i
 // 0 is returned in cases of error, which is the color of @everyone.
 // userID    : The ID of the user to calculate the color for.
 // channelID   : The ID of the channel to calculate the color for.
-func (s *State) UserColor(userID, channelID string) int {
+func (s *Session) UserColor(userID, channelID string) int {
 	if s == nil {
 		return 0
 	}
 
-	channel, err := s.Channel(channelID)
+	channel, err := s.GetChannel(channelID)
 	if err != nil {
 		return 0
 	}
 
-	guild, err := s.Guild(channel.GuildID)
+	guild, err := s.GetGuild(channel.GuildID)
 	if err != nil {
 		return 0
 	}
 
-	member, err := s.Member(guild.ID, userID)
+	member, err := s.GetMember(guild.ID, userID)
 	if err != nil {
 		return 0
 	}

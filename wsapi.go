@@ -73,12 +73,12 @@ func (s *Session) Open() error {
 	}
 
 	// Connect to the Gateway
-	s.log(LogInformational, "connecting to gateway %s", s.gateway)
+	s.log.Info().Str("gateway", s.gateway).Msg("connecting to gateway")
 	header := http.Header{}
 	header.Add("accept-encoding", "zlib")
 	s.wsConn, _, err = websocket.DefaultDialer.Dial(s.gateway, header)
 	if err != nil {
-		s.log(LogWarning, "error connecting to gateway %s, %s", s.gateway, err)
+		s.log.Warn().Err(err).Str("gateway", s.gateway).Msg("error connecting to gateway")
 		s.gateway = "" // clear cached gateway
 		s.wsConn = nil // Just to be safe.
 		return err
@@ -112,7 +112,7 @@ func (s *Session) Open() error {
 		err = fmt.Errorf("expecting Op 10, got Op %d instead", e.Operation)
 		return err
 	}
-	s.log(LogDebug, "Op 10 Hello Packet received from Discord")
+	s.log.Debug().Msg("Op 10 Hello Packet received from Discord")
 	s.LastHeartbeatAck = time.Now().UTC()
 	var h helloOp
 	if err = json.Unmarshal(e.RawData, &h); err != nil {
@@ -141,7 +141,7 @@ func (s *Session) Open() error {
 		p.Data.SessionID = s.sessionID
 		p.Data.Sequence = sequence
 
-		s.log(LogDebug, "sending resume packet to gateway")
+		s.log.Debug().Msg("sending resume packet to gateway")
 		s.wsMutex.Lock()
 		err = s.wsConn.WriteJSON(p)
 		s.wsMutex.Unlock()
@@ -150,19 +150,6 @@ func (s *Session) Open() error {
 			return err
 		}
 
-	}
-
-	// A basic state is a hard requirement for Voice.
-	// We create it here so the below READY/RESUMED packet can populate
-	// the state :)
-	// XXX: Move to New() func?
-	if s.State == nil {
-		state := NewState()
-		state.TrackChannels = true
-		state.TrackEmojis = true
-		state.TrackMembers = true
-		state.TrackRoles = true
-		s.State = state
 	}
 
 	// Now Discord should send us a READY or RESUMED packet.
@@ -174,9 +161,9 @@ func (s *Session) Open() error {
 	if err != nil {
 		return err
 	}
-	s.log(LogDebug, "First Packet:\n%#v\n", e)
+	s.log.Debug().Interface("packet", e).Msg("First Packet:")
 
-	s.log(LogDebug, "We are now connected to Discord, emitting connect event")
+	s.log.Debug().Msg("We are now connected to Discord, emitting connect event")
 	s.handleEvent(connectEventType, &Connect{})
 
 	// Create listening chan outside of listen, as it needs to happen inside the
@@ -209,15 +196,15 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 
 			if sameConnection {
 
-				s.log(LogWarning, "Error reading from gateway %s websocket, %s", s.gateway, err)
+				s.log.Warn().Err(err).Str("gateway", s.gateway).Msg("Error reading from gateway websocket")
 				// There has been an error reading, close the websocket so that
 				// OnDisconnect event is emitted.
 				err := s.Close()
 				if err != nil {
-					s.log(LogWarning, "Error closing session connection, %s", err)
+					s.log.Warn().Err(err).Msg("Error closing session connection")
 				}
 
-				s.log(LogDebug, "Calling reconnect() now")
+				s.log.Debug().Msg("Calling reconnect() now")
 				s.reconnect()
 			}
 
@@ -273,23 +260,23 @@ func (s *Session) heartbeat(wsConn *websocket.Conn, listening <-chan interface{}
 		last := s.LastHeartbeatAck
 		s.RUnlock()
 		sequence := atomic.LoadInt64(s.sequence)
-		s.log(LogDebug, "sending gateway websocket heartbeat seq %d", sequence)
+		s.log.Debug().Int64("seq", *s.sequence).Msg("Sending gateway websocket heartbeat")
 		s.wsMutex.Lock()
 		s.LastHeartbeatSent = time.Now().UTC()
 		err = wsConn.WriteJSON(heartbeatOp{1, sequence})
 		s.wsMutex.Unlock()
 		if err != nil || time.Now().UTC().Sub(last) > (heartbeatIntervalMsec*FailedHeartbeatAcks) {
 			if err != nil {
-				s.log(LogError, "error sending heartbeat to gateway %s, %s", s.gateway, err)
+				s.log.Error().Str("gateway", s.gateway).Err(err).Msg("Error sending heartbeat to gateway")
 			} else {
-				s.log(LogError, "haven't gotten a heartbeat ACK in %v, triggering a reconnection", time.Now().UTC().Sub(last))
+				s.log.Error().Dur("duration", time.Now().UTC().Sub(last)).Msg("haven't gotten heartbeat ACK, triggering reconnection")
 			}
 			s.Close()
 			s.reconnect()
 			return
 		}
 		s.Lock()
-		s.DataReady = true
+		s.IsReady = true
 		s.Unlock()
 
 		select {
@@ -424,7 +411,6 @@ func (s *Session) RequestGuildMembers(guildID, query string, limit int) (err err
 // If you use the AddHandler() function to register a handler for the
 // "OnEvent" event then all events will be passed to that handler.
 func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
-
 	var err error
 	var reader io.Reader
 	reader = bytes.NewBuffer(message)
@@ -434,14 +420,14 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 
 		z, err2 := zlib.NewReader(reader)
 		if err2 != nil {
-			s.log(LogError, "error uncompressing websocket message, %s", err)
+			s.log.Error().Err(err).Msg("error uncompressing websocket message")
 			return nil, err2
 		}
 
 		defer func() {
 			err3 := z.Close()
 			if err3 != nil {
-				s.log(LogWarning, "error closing zlib, %s", err)
+				s.log.Warn().Err(err).Msg("error closing zlib")
 			}
 		}()
 
@@ -452,21 +438,21 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	var e *Event
 	decoder := json.NewDecoder(reader)
 	if err = decoder.Decode(&e); err != nil {
-		s.log(LogError, "error decoding websocket message, %s", err)
+		s.log.Error().Err(err).Msg("error decoding websocket message")
 		return e, err
 	}
 
-	s.log(LogDebug, "Op: %d, Seq: %d, Type: %s, Data: %s\n\n", e.Operation, e.Sequence, e.Type, string(e.RawData))
+	s.log.Debug().Int("op", e.Operation).Int64("seq", e.Sequence).Str("type", e.Type).Send()
 
 	// Ping request.
 	// Must respond with a heartbeat packet within 5 seconds
 	if e.Operation == 1 {
-		s.log(LogDebug, "sending heartbeat in response to Op1")
+		s.log.Debug().Msg("sending heartbeat in response to Op1")
 		s.wsMutex.Lock()
 		err = s.wsConn.WriteJSON(heartbeatOp{1, atomic.LoadInt64(s.sequence)})
 		s.wsMutex.Unlock()
 		if err != nil {
-			s.log(LogError, "error sending heartbeat in response to Op1")
+			s.log.Error().Msg("error sending heartbeat in response to Op1")
 			return e, err
 		}
 
@@ -476,7 +462,7 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	// Reconnect
 	// Must immediately disconnect from gateway and reconnect to new gateway.
 	if e.Operation == 7 {
-		s.log(LogDebug, "Closing and reconnecting in response to Op7")
+		s.log.Debug().Msg("Closing and reconnecting in response to Op7")
 		s.CloseWithStatus(4000)
 		s.reconnect()
 		return e, nil
@@ -486,11 +472,11 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	// Must respond with a Identify packet.
 	if e.Operation == 9 {
 
-		s.log(LogDebug, "sending identify packet to gateway in response to Op9")
+		s.log.Debug().Msg("sending identify packet to gateway in response to Op9")
 
 		err = s.identify()
 		if err != nil {
-			s.log(LogWarning, "error sending gateway identify packet, %s, %s", s.gateway, err)
+			s.log.Warn().Err(err).Str("gateway", s.gateway).Msg("error sending gateway identify packet")
 			return e, err
 		}
 
@@ -506,7 +492,7 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 		s.Lock()
 		s.LastHeartbeatAck = time.Now().UTC()
 		s.Unlock()
-		s.log(LogDebug, "got heartbeat ACK")
+		s.log.Debug().Msg("got heartbeat ACK")
 		return e, nil
 	}
 
@@ -514,65 +500,37 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	if e.Operation != 0 {
 		// But we probably should be doing something with them.
 		// TEMP
-		s.log(LogWarning, "unknown Op: %d, Seq: %d, Type: %s, Data: %s, message: %s", e.Operation, e.Sequence, e.Type, string(e.RawData), string(message))
+		s.log.Warn().Int("op", e.Operation).Int64("seq", e.Sequence).Str("type", e.Type).Str("data", string(e.RawData)).Str("message", string(message)).Msg("unknown")
 		return e, nil
 	}
 
 	// Store the message sequence
 	atomic.StoreInt64(s.sequence, e.Sequence)
 
-	if !belongsToList(e.Type, s.SandwichConfig.EventBlacklist) {
+	if !belongsToList(e.Type, s.configuration.EventBlacklist) {
 		// Map event to registered event handlers and pass it along to any registered handlers.
 		if eh, ok := registeredInterfaceProviders[e.Type]; ok {
 			e.Struct = eh.New()
 
 			if err = json.Unmarshal(e.RawData, e.Struct); err != nil {
-				s.log(LogError, "error unmarshalling %s event, %s", e.Type, err)
+				s.log.Warn().Err(err).Str("type", e.Type).Msg("error unmarshalling event")
 				return nil, err
 			}
 			s.handleEvent(e.Type, e.Struct)
 		} else {
-			s.log(LogWarning, "unknown event: Op: %d, Seq: %d, Type: %s, Data: %s", e.Operation, e.Sequence, e.Type, string(e.RawData))
+			s.log.Warn().Int("op", e.Operation).Int64("seq", e.Sequence).Str("type", e.Type).Str("data", string(e.RawData)).Msg("unknown event")
 		}
 
-		if !belongsToList(e.Type, s.SandwichConfig.IgnoredEvents) {
+		if !belongsToList(e.Type, s.configuration.IgnoredEvents) {
 			s.EventChannel <- *e
 		} else {
-			s.log(LogDebug, "Ignoring event %s as it is ignored", e.Type)
+			s.log.Debug().Str("event", e.Type).Msg("Not publishing event as it is ignored")
 		}
 	} else {
-		s.log(LogDebug, "Ignoring event %s as it is blacklisted", e.Type)
+		s.log.Debug().Str("event", e.Type).Msg("Completely ignoring event as it is blacklisted")
 	}
 
 	return e, nil
-}
-
-// onVoiceStateUpdate handles Voice State Update events on the data websocket.
-func (s *Session) onVoiceStateUpdate(st *VoiceStateUpdate) {
-
-	// If we don't have a connection for the channel, don't bother
-	if st.ChannelID == "" {
-		return
-	}
-
-	// Check if we have a voice connection to update
-	s.RLock()
-	voice, exists := s.VoiceConnections[st.GuildID]
-	s.RUnlock()
-	if !exists {
-		return
-	}
-
-	// We only care about events that are about us.
-	if s.State.User.ID != st.UserID {
-		return
-	}
-
-	// Store the SessionID for later use.
-	voice.UserID = st.UserID
-	voice.ChannelID = st.ChannelID
-	voice.deaf = st.Deaf
-	voice.mute = st.Mute
 }
 
 type identifyProperties struct {
@@ -640,22 +598,22 @@ func (s *Session) reconnect() {
 		wait := time.Duration(1)
 
 		for {
-			s.log(LogInformational, "trying to reconnect to gateway")
+			s.log.Info().Msg("trying to reconnect to gateway")
 
 			err = s.Open()
 			if err == nil {
-				s.log(LogInformational, "successfully reconnected to gateway")
+				s.log.Info().Msg("successfully reconnected to gateway")
 				return
 			}
 
 			// Certain race conditions can call reconnect() twice. If this happens, we
 			// just break out of the reconnect loop
 			if err == ErrWSAlreadyOpen {
-				s.log(LogInformational, "Websocket already exists, no need to reconnect")
+				s.log.Info().Msg("Websocket already exists, no need to reconnect")
 				return
 			}
 
-			s.log(LogWarning, "error reconnecting to gateway, %s", err)
+			s.log.Info().Err(err).Msg("error reconnecting to gateway")
 
 			<-time.After(wait * time.Second)
 			wait *= 2
@@ -670,30 +628,30 @@ func (s *Session) reconnect() {
 func (s *Session) CloseWithStatus(statusCode int) (err error) {
 	s.Lock()
 
-	s.DataReady = false
+	s.IsReady = false
 
 	if s.listening != nil {
-		s.log(LogDebug, "closing listening channel")
+		s.log.Debug().Msg("closing listening channel")
 		close(s.listening)
 		s.listening = nil
 	}
 
 	if s.wsConn != nil {
 
-		s.log(LogDebug, "sending close frame")
+		s.log.Debug().Msg("sending close frame")
 		// To cleanly close a connection, a client should send a close
 		// frame and wait for the server to close the connection.
 		s.wsMutex.Lock()
 		err := s.wsConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(statusCode, ""))
 		s.wsMutex.Unlock()
 		if err != nil {
-			s.log(LogWarning, "error closing websocket, %s", err)
+			s.log.Warn().Err(err).Msg("error closing websocket")
 		}
 
-		s.log(LogDebug, "closing gateway websocket")
+		s.log.Debug().Msg("closing gateway websocket")
 		err = s.wsConn.Close()
 		if err != nil {
-			s.log(LogWarning, "error closing websocket, %s", err)
+			s.log.Warn().Err(err).Msg("error closing websocket")
 		}
 
 		s.wsConn = nil
@@ -701,7 +659,7 @@ func (s *Session) CloseWithStatus(statusCode int) (err error) {
 
 	s.Unlock()
 
-	s.log(LogDebug, "emit disconnect event")
+	s.log.Debug().Msg("emit disconnect event")
 	s.handleEvent(disconnectEventType, &Disconnect{})
 
 	return
