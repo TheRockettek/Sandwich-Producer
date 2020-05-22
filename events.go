@@ -1,25 +1,14 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
-// This file contains all the possible structs that can be
-// handled by AddHandler/EventHandler.
-// DO NOT ADD ANYTHING BUT EVENT HANDLER STRUCTS TO THIS FILE.
-//go:generate go run tools/cmd/eventhandlers/main.go
-
-// Connect is the data for a Connect event.
-// This is a synthetic event and is not dispatched by Discord.
-type Connect struct{}
-
-// Disconnect is the data for a Disconnect event.
-// This is a synthetic event and is not dispatched by Discord.
-type Disconnect struct{}
-
-// RateLimit is the data for a RateLimit event.
-// This is a synthetic event and is not dispatched by Discord.
-type RateLimit struct {
-	*TooManyRequests
-	URL string
+// StreamEvent provides the struct for events that are sent over STAN/NATS
+type StreamEvent struct {
+	Type string      `msgpack:"i"`
+	Data interface{} `msgpack:"d"`
 }
 
 // Event provides a basic initial struct for all websocket events.
@@ -28,18 +17,76 @@ type Event struct {
 	Sequence  int64           `json:"s" msgpack:"s"`
 	Type      string          `json:"t" msgpack:"t"`
 	RawData   json.RawMessage `json:"d" msgpack:"-"`
-	// Struct contains one of the other types in this file.
-	Struct interface{} `json:"-" msgpack:"d"`
+
+	// Marshalled event
+	Data interface{} `json:"-" msgpack:"d"`
+}
+
+// RequestGuildMembers is the data sent to discord when requesting guild members.
+type RequestGuildMembers struct {
+	Op   int `json:"op"`
+	Data struct {
+		GuildID string `json:"guild_id"`
+		Query   string `json:"query"`
+		Limit   int    `json:"limit"`
+	} `json:"d"`
+}
+
+// Resume is the packet that we send to discord.
+type Resume struct {
+	Op   int `json:"op"`
+	Data struct {
+		Token     string `json:"token"`
+		SessionID string `json:"session_id"`
+		Sequence  int64  `json:"seq"`
+	} `json:"d"`
+}
+
+// Hello is the data sent for the Hello event.
+type Hello struct {
+	HeartbeatInterval time.Duration `json:"heartbeat_interval"`
+}
+
+// Heartbeat is the data for the Heartbeat event.
+type Heartbeat struct {
+	Op   int   `json:"op"`
+	Data int64 `json:"d"`
+}
+
+// UpdateStatus is the data send to update the status.
+type UpdateStatus struct {
+	Op   int              `json:"op"`
+	Data UpdateStatusData `json:"d"`
 }
 
 // A Ready stores all data for the websocket READY event.
 type Ready struct {
-	Version         int          `json:"v"`
-	SessionID       string       `json:"session_id"`
-	User            *User        `json:"user"`
-	ReadState       []*ReadState `json:"read_state"`
-	PrivateChannels []*Channel   `json:"private_channels"`
-	Guilds          []*Guild     `json:"guilds"`
+	Version         int        `json:"v"`
+	SessionID       string     `json:"session_id"`
+	User            *User      `json:"user"`
+	PrivateChannels []*Channel `json:"private_channels"`
+	Guilds          []*Guild   `json:"guilds"`
+}
+
+// Identify is the data sent when identifying
+type Identify struct {
+	Op   int          `json:"op"`
+	Data identifyData `json:"d"`
+}
+
+type identifyProperties struct {
+	OS      string `json:"$os"`
+	Browser string `json:"$browser"`
+	Device  string `json:"$device"`
+}
+
+type identifyData struct {
+	Token          string             `json:"token"`
+	Properties     identifyProperties `json:"properties"`
+	LargeThreshold int                `json:"large_threshold"`
+	Compress       bool               `json:"compress"`
+	Shard          *[2]int            `json:"shard,omitempty"`
+	Presence       UpdateStatusData   `json:"presence,omitempty"`
 }
 
 // ChannelCreate is the data for a ChannelCreate event.
@@ -177,16 +224,6 @@ type MessageReactionRemoveAll struct {
 	*MessageReaction
 }
 
-// PresencesReplace is the data for a PresencesReplace event.
-type PresencesReplace []*Presence
-
-// PresenceUpdate is the data for a PresenceUpdate event.
-type PresenceUpdate struct {
-	Presence
-	GuildID string   `json:"guild_id"`
-	Roles   []string `json:"roles"`
-}
-
 // Resumed is the data for a Resumed event.
 type Resumed struct {
 	Trace []string `json:"_trace"`
@@ -203,20 +240,6 @@ type TypingStart struct {
 // UserUpdate is the data for a UserUpdate event.
 type UserUpdate struct {
 	*User
-}
-
-// UserSettingsUpdate is the data for a UserSettingsUpdate event.
-type UserSettingsUpdate map[string]interface{}
-
-// UserGuildSettingsUpdate is the data for a UserGuildSettingsUpdate event.
-type UserGuildSettingsUpdate struct {
-	*UserGuildSettings
-}
-
-// UserNoteUpdate is the data for a UserNoteUpdate event.
-type UserNoteUpdate struct {
-	ID   string `json:"id"`
-	Note string `json:"note"`
 }
 
 // VoiceServerUpdate is the data for a VoiceServerUpdate event.

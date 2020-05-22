@@ -1,0 +1,37 @@
+{
+    "_identity": "This is how the bot will identify itself to the sandwich-manager",
+    "identity": "ExampleBot",
+
+    "_token": "This is the token for your bot. Does not need Bot before it",
+    "token": "...",
+
+    "_prefix": "This is the prefix the bot will use for caching. Ensure that two instances don't use the same prefix",
+    "prefix": "exampleBot",
+
+    "_is_autosharded": "Boolean if the bot should autoshard. If false, a shard count must be defined or it will autoshard",
+    "is_autosharded": false,
+
+    "_shard_count": "Count of shards the bot will use if it is not autosharded",
+    "shard_count": 64,
+
+    "_shard_ids": "List of shard ids the bot will use. By default this will populate itself. Keep this empty unless you are running multiple consumers",
+    "shard_ids": [],
+
+    "_manager_address": "Address of the sandwich-manager",
+    "manager_address": "",
+
+    "_cache_address": "Address of the redis handler",
+    "cache_address": "localhost:6379",
+
+    "_nats_address": "Address of NATS.io server",
+    "nats_address": "localhost:9092",
+
+    "_database_address": "Not currently used",
+    "database_address": "",
+
+    "_event_blacklist": "List of events that will be completely ignored from both caching and sending to kafka",
+    "event_blacklist": ["PRESENCE_UPDATE", "INVITE_CREATE", "INVITE_DELETE", "INVITE_UPDATE"],
+
+    "_ignored_events": "List of events that will still be internally managed (cache) but not distributed through kafka",
+    "ignored_events": []
+}
