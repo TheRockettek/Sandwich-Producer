@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +15,8 @@ var zlog = zerolog.New(zerolog.ConsoleWriter{
 	Out:        os.Stdout,
 	TimeFormat: time.Stamp,
 }).With().Timestamp().Logger()
+
+var ctx = context.Background()
 
 func init() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
@@ -54,7 +57,7 @@ func main() {
 
 	err := m.Open()
 	if err != nil {
-		zlog.Panic().Err(err).Send()
+		zlog.Panic().Err(err).Msg("Cold not start manager")
 	}
 
 	zlog.Info().Msg("Sessions have now started. Do ^C to close sessions")

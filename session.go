@@ -51,6 +51,9 @@ var ErrWSShardBounds = errors.New("ShardID must be less than ShardCount")
 // session manager to retrieve this value.
 var ErrGatewayNotFound = errors.New("no gateway was passed")
 
+// ErrInvalidToken is passed when the token used to authenticate is not valid.
+var ErrInvalidToken = errors.New("Invalid token passed")
+
 // FailedHeartbeatAcks is the Number of heartbeat intervals to wait until forcing a connection restart.
 const FailedHeartbeatAcks time.Duration = 5 * time.Millisecond
 
@@ -623,6 +626,7 @@ func (s *Session) SendUpdateStatus(usd UpdateStatusData) (err error) {
 
 func (s *Session) dispatch(et string, e *Event) error {
 	var err error
+	println("Dispatch", e.Type)
 	s.eventChannel <- *e
 	return err
 }

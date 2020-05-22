@@ -170,6 +170,23 @@ func (m *Manager) Gateway() (st *GatewayBotResponse, err error) {
 		return
 	}
 
+	switch resp.StatusCode {
+	case 429:
+		rl := TooManyRequests{}
+		err = json.Unmarshal(response, &rl)
+		if err != nil {
+			m.log.Error().Err(err).Msg("rate limit unmarshal error")
+			return
+		}
+
+		m.log.Warn().Dur("retry_after", rl.RetryAfter).Msg("gateway request was ratelimited")
+		time.Sleep(rl.RetryAfter * time.Millisecond)
+		return m.Gateway()
+	case http.StatusUnauthorized:
+		err = ErrInvalidToken
+		return
+	}
+
 	err = json.Unmarshal(response, &st)
 	if err != nil {
 		return
@@ -185,7 +202,9 @@ func (m *Manager) OnEvent(e Event) (ok bool, se StreamEvent) {
 	var ma func(*Manager, Event) (bool, StreamEvent)
 
 	if ma, ok = marshalers[e.Type]; ok {
+		println("OnEvent")
 		ok, data = ma(m, e)
+		println("OnEvent Finish")
 		if ok {
 			se = data
 		} else {
@@ -215,7 +234,9 @@ func (m *Manager) ForwardEvents() {
 			continue
 		}
 
+		println("Forward")
 		ok, se = m.OnEvent(e)
+		println("Forward End")
 
 		if ok && !belongsToList(m.Configuration.ProducerBlacklist, e.Type) {
 			m.produceChannel <- se

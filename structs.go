@@ -130,6 +130,14 @@ type MfaLevel int
 // PremiumTier type definition
 type PremiumTier int
 
+// A TooManyRequests struct holds information received from Discord
+// when receiving a HTTP 429 response.
+type TooManyRequests struct {
+	Bucket     string        `json:"bucket"`
+	Message    string        `json:"message"`
+	RetryAfter time.Duration `json:"retry_after"`
+}
+
 // UpdateStatusData represents the status changed
 type UpdateStatusData struct {
 	IdleSince *int   `json:"since"`
