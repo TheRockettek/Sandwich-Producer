@@ -1,5 +1,12 @@
 package main
 
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/vmihailenco/msgpack"
+)
+
 // A MarshalGuild holds all data related to a specific Discord Guild that is stored
 // in cache.
 type MarshalGuild struct {
@@ -107,4 +114,126 @@ type MarshalGuild struct {
 
 	// The total number of users currently boosting this server
 	PremiumSubscriptionCount int `msgpack:"premium_subscription_count" json:"premium_subscription_count"`
+}
+
+// Create takes a discord guild object in the form of a RawMessage
+// and unmarshals the values and fills out the MarshalGuild struct.
+func (mg *MarshalGuild) Create(data json.RawMessage) (err error) {
+
+	err = json.Unmarshal(data, &mg)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to unmarshal guild")
+		return
+	}
+
+	mg.Roles = make([]string, 0)
+	for _, r := range mg.RoleValues {
+		mg.Roles = append(mg.Roles, r.ID)
+	}
+
+	mg.Channels = make([]string, 0)
+	for _, c := range mg.ChannelValues {
+		mg.Channels = append(mg.Channels, c.ID)
+	}
+
+	mg.Emojis = make([]string, 0)
+	for _, e := range mg.EmojiValues {
+		mg.Emojis = append(mg.Emojis, e.ID)
+	}
+
+	return
+}
+
+// From is similar to the Create method however is intended for Redis
+// values which use msgpack instead of json and will not assign IDs from
+// values which we want to preserve and are not stored in redis
+func (mg *MarshalGuild) From(data []byte) (err error) {
+
+	err = msgpack.Unmarshal(data, &mg)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to unmarshal guild")
+		return
+	}
+
+	return
+}
+
+// Save will store the guild, role, channels and emojis on redis
+func (mg *MarshalGuild) Save(m *Manager) (err error) {
+	var ma interface{}
+
+	// We create a map of keys and values that redis will use instead
+	// of creating multiple HMSet requests.
+
+	guildRoles := make(map[string]interface{})
+	for _, r := range mg.RoleValues {
+		if ma, err = msgpack.Marshal(r); err == nil {
+			guildRoles[r.ID] = ma
+		} else {
+			m.log.Error().Err(err).Msg("failed to marshal role")
+		}
+	}
+
+	if len(guildRoles) > 0 {
+		if err = m.Configuration.redisClient.HMSet(
+			ctx,
+			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, mg.ID),
+			guildRoles,
+		).Err(); err != nil {
+			m.log.Error().Err(err).Msg("failed to set roles")
+		}
+	}
+
+	guildChannels := make(map[string]interface{})
+	for _, c := range mg.ChannelValues {
+		if ma, err = msgpack.Marshal(c); err == nil {
+			guildChannels[c.ID] = ma
+		} else {
+			m.log.Error().Err(err).Msg("failed to marshal channel")
+		}
+	}
+
+	if len(guildChannels) > 0 {
+		if err = m.Configuration.redisClient.HMSet(
+			ctx,
+			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+			guildChannels,
+		).Err(); err != nil {
+			m.log.Error().Err(err).Msg("failed to set channels")
+		}
+	}
+
+	guildEmojis := make(map[string]interface{})
+	for _, e := range mg.EmojiValues {
+		if ma, err = msgpack.Marshal(e); err == nil {
+			guildEmojis[e.ID] = ma
+		} else {
+			m.log.Error().Err(err).Msg("failed to marshal emoji")
+		}
+	}
+
+	if len(guildEmojis) > 0 {
+		if err = m.Configuration.redisClient.HMSet(
+			ctx,
+			fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+			guildEmojis,
+		).Err(); err != nil {
+			m.log.Error().Err(err).Msg("failed to set emojis")
+		}
+	}
+
+	if ma, err = msgpack.Marshal(mg); err == nil {
+		if err = m.Configuration.redisClient.HMSet(
+			ctx,
+			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+			mg.ID,
+			ma,
+		).Err(); err != nil {
+			m.log.Error().Err(err).Msg("failed to set guild")
+		}
+	} else {
+		m.log.Error().Err(err).Msg("failed to marshal guild")
+	}
+
+	return
 }

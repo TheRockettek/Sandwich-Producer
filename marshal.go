@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/vmihailenco/msgpack"
 )
 
 var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent))
@@ -49,7 +47,7 @@ func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	}
 
 	for _, g := range ready.Guilds {
-		m.Unavailables[g.ID] = true
+		m.Unavailables[g.ID] = false
 	}
 
 	return
@@ -57,97 +55,33 @@ func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 
 func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	var err error
-	var ma []byte
 
 	guild := MarshalGuild{}
-	err = json.Unmarshal(e.RawData, &guild)
+	err = guild.Create(e.RawData)
 	if err != nil {
 		zlog.Error().Err(err).Msg("failed to unmarshal guild")
 		return
 	}
 
-	// Create snowflakes from role, channel and emoji objects
-
-	guildRoles := make(map[string]interface{})
-	guild.Roles = make([]string, 0)
-	for _, r := range guild.RoleValues {
-		guild.Roles = append(guild.Roles, r.ID)
-		if ma, err = msgpack.Marshal(r); err == nil {
-			guildRoles[r.ID] = ma
-		} else {
-			zlog.Error().Err(err).Msg("failed to marshal role")
-		}
-	}
-
-	guildChannels := make(map[string]interface{})
-	guild.Channels = make([]string, 0)
-	for _, c := range guild.ChannelValues {
-		guild.Channels = append(guild.Channels, c.ID)
-		if ma, err = msgpack.Marshal(c); err == nil {
-			guildChannels[c.ID] = ma
-		} else {
-			zlog.Error().Err(err).Msg("failed to marshal channel")
-		}
-	}
-
-	guildEmojis := make(map[string]interface{})
-	guild.Emojis = make([]string, 0)
-	for _, e := range guild.EmojiValues {
-		guild.Emojis = append(guild.Emojis, e.ID)
-		if ma, err = msgpack.Marshal(e); err == nil {
-			guildEmojis[e.ID] = ma
-		} else {
-			zlog.Error().Err(err).Msg("failed to marshal emoji")
-		}
-	}
-
-	if len(guildRoles) > 0 {
-		if err = m.Configuration.redisClient.HMSet(
-			ctx,
-			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
-			guildRoles,
-		).Err(); err != nil {
-			zlog.Error().Err(err).Msg("failed to set roles")
-		}
-	}
-
-	if len(guildChannels) > 0 {
-		if err = m.Configuration.redisClient.HMSet(
-			ctx,
-			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
-			guildChannels,
-		).Err(); err != nil {
-			zlog.Error().Err(err).Msg("failed to set channels")
-		}
-	}
-
-	if len(guildEmojis) > 0 {
-		if err = m.Configuration.redisClient.HMSet(
-			ctx,
-			fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
-			guildEmojis,
-		).Err(); err != nil {
-			zlog.Error().Err(err).Msg("failed to set emojis")
-		}
-	}
-
-	if ma, err = msgpack.Marshal(guild); err == nil {
-		if err = m.Configuration.redisClient.HMSet(
-			ctx,
-			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
-			guild.ID,
-			ma,
-		).Err(); err != nil {
-			zlog.Error().Err(err).Msg("failed to set guild")
-		}
-	} else {
-		zlog.Error().Err(err).Msg("failed to marshal guild")
+	err = guild.Save(m)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to save guild")
 	}
 
 	// Check if guild was previously unavailable so we can differentiate
 	// between if the bot was just invited or not
-	if un, uo := m.Unavailables[guild.ID]; un && uo {
-		ok = false
+	if un, uo := m.Unavailables[guild.ID]; un {
+		// If the value was true, this means that during the bot running
+		// the guild had previously gone down and is now available again.
+		if uo {
+			ok = true
+			se = StreamEvent{
+				Type: "GUILD_AVAILABLE",
+				Data: guild,
+			}
+		} else {
+			ok = false
+		}
 	} else {
 		// We will only fire events if they have invited bot
 		ok = true
@@ -162,6 +96,91 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return ok, se
 }
 
+func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+	var rawData string
+
+	println(string(e.RawData))
+
+	partialGuild := UnavailableGuild{}
+	err = json.Unmarshal(e.RawData, &partialGuild)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to unmarshal partial guild")
+		return
+	}
+
+	if rawData, err = m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+		partialGuild.ID,
+	).Result(); err != nil {
+		zlog.Error().Err(err).Msg("failed to remove guild")
+	}
+
+	guild := MarshalGuild{}
+	guild.From([]byte(rawData))
+
+	if partialGuild.Unavailable {
+		// guild has gone down
+		m.Unavailables[partialGuild.ID] = true
+		ok = true
+		se = StreamEvent{
+			Type: "GUILD_UNAVAILABLE",
+			Data: guild,
+		}
+	} else {
+		// user has left guild
+		if len(guild.Roles) > 0 {
+			if err = m.Configuration.redisClient.HDel(
+				ctx,
+				fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
+				guild.Roles...,
+			).Err(); err != nil {
+				zlog.Error().Err(err).Msg("failed to remove roles")
+			}
+		}
+
+		if len(guild.Channels) > 0 {
+			if err = m.Configuration.redisClient.HDel(
+				ctx,
+				fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+				guild.Channels...,
+			).Err(); err != nil {
+				zlog.Error().Err(err).Msg("failed to remove channels")
+			}
+		}
+
+		if len(guild.Emojis) > 0 {
+			if err = m.Configuration.redisClient.HDel(
+				ctx,
+				fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+				guild.Emojis...,
+			).Err(); err != nil {
+				zlog.Error().Err(err).Msg("failed to remove emojis")
+			}
+		}
+
+		if err = m.Configuration.redisClient.HDel(
+			ctx,
+			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+			guild.ID,
+		).Err(); err != nil {
+			zlog.Error().Err(err).Msg("failed to remove guild")
+		}
+
+		ok = true
+		se = StreamEvent{
+			Type: "GUILD_REMOVE",
+			Data: guild,
+		}
+	}
+
+	return
+}
+
+// func customEventMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+// }
+
 func init() {
 	addMarshaler("READY", readyMarshaler)
 
@@ -169,7 +188,7 @@ func init() {
 	addMarshaler("SHARD_DISCONNECT", shardDisconnectMarshaler)
 
 	addMarshaler("GUILD_CREATE", guildCreateMarshaler)
-	// GUILD_DELETE
+	addMarshaler("GUILD_DELETE", guildDeleteMarshaler)
 	// GUILD_UPDATE
 
 	// GUILD_EMOJIS_UPDATE

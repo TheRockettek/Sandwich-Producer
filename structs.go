@@ -239,6 +239,16 @@ type Member struct {
 	PremiumSince Timestamp `json:"premium_since"`
 }
 
+// UnavailableGuild is sent when you receive a GUILD_DELETE event. This contains
+// the guild ID and if it is no longer available.
+type UnavailableGuild struct {
+	// The ID of the guild.
+	ID string `json:"id"`
+
+	// Whether this guild is currently unavailable (most likely due to outage).
+	Unavailable bool `json:"unavailable"`
+}
+
 // A Guild holds all data related to a specific Discord Guild.  Guilds are also
 // sometimes referred to as Servers in the Discord client.
 type Guild struct {
