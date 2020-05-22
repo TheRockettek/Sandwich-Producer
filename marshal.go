@@ -134,7 +134,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	if ma, err = msgpack.Marshal(guild); err == nil {
 		if err = m.Configuration.redisClient.HMSet(
 			ctx,
-			fmt.Sprintf("%s:guild", m.Configuration.RedisPrefix),
+			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
 			guild.ID,
 			ma,
 		).Err(); err != nil {
@@ -143,8 +143,6 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	} else {
 		zlog.Error().Err(err).Msg("failed to marshal guild")
 	}
-
-	// TODO: Add struct information to redis
 
 	// Check if guild was previously unavailable so we can differentiate
 	// between if the bot was just invited or not

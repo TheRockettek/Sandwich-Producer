@@ -58,17 +58,17 @@ type MarshalGuild struct {
 
 	// A list of roles in the guild.
 	Roles      []string `msgpack:"roles"`
-	RoleValues []*Role  `json:"roles"`
+	RoleValues []*Role  `json:"roles" msgpack:"-"`
 
 	// A list of the custom emojis present in the guild.
 	Emojis      []string `msgpack:"emojis"`
-	EmojiValues []*Emoji `json:"emojis"`
+	EmojiValues []*Emoji `json:"emojis" msgpack:"-"`
 
 	// A list of channels in the guild.
 	// This field is only present in GUILD_CREATE events and websocket
 	// update events, and thus is only present in state-cached guilds.
 	Channels      []string   `msgpack:"channels"`
-	ChannelValues []*Channel `json:"channels"`
+	ChannelValues []*Channel `json:"channels" msgpack:"-"`
 
 	// Whether this guild is currently unavailable (most likely due to outage).
 	// This field is only present in GUILD_CREATE events and websocket
