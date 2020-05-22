@@ -101,32 +101,38 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		}
 	}
 
-	if err = m.Configuration.redisClient.HMSet(
-		ctx,
-		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
-		guildRoles,
-	).Err(); err != nil {
-		zlog.Error().Err(err).Msg("failed to set roles")
+	if len(guildRoles) > 0 {
+		if err = m.Configuration.redisClient.HMSet(
+			ctx,
+			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
+			guildRoles,
+		).Err(); err != nil {
+			zlog.Error().Err(err).Msg("failed to set roles")
+		}
 	}
 
-	if err = m.Configuration.redisClient.HMSet(
-		ctx,
-		fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
-		guildChannels,
-	).Err(); err != nil {
-		zlog.Error().Err(err).Msg("failed to set channels")
+	if len(guildChannels) > 0 {
+		if err = m.Configuration.redisClient.HMSet(
+			ctx,
+			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+			guildChannels,
+		).Err(); err != nil {
+			zlog.Error().Err(err).Msg("failed to set channels")
+		}
 	}
 
-	if err = m.Configuration.redisClient.HMSet(
-		ctx,
-		fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
-		guildEmojis,
-	).Err(); err != nil {
-		zlog.Error().Err(err).Msg("failed to set emojis")
+	if len(guildEmojis) > 0 {
+		if err = m.Configuration.redisClient.HMSet(
+			ctx,
+			fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+			guildEmojis,
+		).Err(); err != nil {
+			zlog.Error().Err(err).Msg("failed to set emojis")
+		}
 	}
 
-	if ma, err = msgpack.Marshal(guild); err != nil {
-		if err = m.Configuration.redisClient.HSet(
+	if ma, err = msgpack.Marshal(guild); err == nil {
+		if err = m.Configuration.redisClient.HMSet(
 			ctx,
 			fmt.Sprintf("%s:guild", m.Configuration.RedisPrefix),
 			guild.ID,
@@ -145,7 +151,6 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	if un, uo := m.Unavailables[guild.ID]; un && uo {
 		ok = false
 	} else {
-		println("Guild invited bot")
 		// We will only fire events if they have invited bot
 		ok = true
 		se = StreamEvent{

@@ -202,9 +202,7 @@ func (m *Manager) OnEvent(e Event) (ok bool, se StreamEvent) {
 	var ma func(*Manager, Event) (bool, StreamEvent)
 
 	if ma, ok = marshalers[e.Type]; ok {
-		println("OnEvent")
 		ok, data = ma(m, e)
-		println("OnEvent Finish")
 		if ok {
 			se = data
 		} else {
@@ -234,9 +232,7 @@ func (m *Manager) ForwardEvents() {
 			continue
 		}
 
-		println("Forward")
 		ok, se = m.OnEvent(e)
-		println("Forward End")
 
 		if ok && !belongsToList(m.Configuration.ProducerBlacklist, e.Type) {
 			m.produceChannel <- se
@@ -264,7 +260,7 @@ func (m *Manager) ForwardProduce() {
 	}
 
 	for e = range m.produceChannel {
-		println(e.Type)
+
 		ep, err = msgpack.Marshal(e)
 		if err != nil {
 			m.log.Warn().Err(err).Msg("failed to marshal stream event")

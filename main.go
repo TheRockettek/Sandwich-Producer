@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,16 +24,11 @@ func init() {
 }
 
 func main() {
-
-	// UpdateStatusData{
-	// 	Status: "dnd",
-	// 	Game: &Game{
-	// 		Name: "welcomer.gg | +help",
-	// 	},
-	// }
+	token := flag.String("token", "", "token the bot will use to authenticate")
+	flag.Parse()
 
 	m := NewManager(
-		"TOKEN",
+		*token,
 		"welcomer",
 		managerConfiguration{
 			NatsAddress:   "127.0.0.1:4000",

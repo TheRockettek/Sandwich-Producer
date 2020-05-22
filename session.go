@@ -626,7 +626,6 @@ func (s *Session) SendUpdateStatus(usd UpdateStatusData) (err error) {
 
 func (s *Session) dispatch(et string, e *Event) error {
 	var err error
-	println("Dispatch", e.Type)
 	s.eventChannel <- *e
 	return err
 }
