@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -100,6 +101,33 @@ func NewManager(token string, identity string, configuration managerConfiguratio
 	}
 	m.Configuration.redisClient = redis.NewClient(configuration.redisOptions)
 
+	return
+}
+
+// ClearCache removes keys from redis. There is definitely a more inteligent way of doing this.
+func (m *Manager) ClearCache() (err error) {
+	var keys []string
+	iter := m.Configuration.redisClient.Scan(
+		ctx,
+		0,
+		fmt.Sprintf("%s:*", m.Configuration.RedisPrefix),
+		0,
+	).Iterator()
+
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+
+	if len(keys) > 0 {
+		if err = m.Configuration.redisClient.Del(
+			ctx,
+			keys...,
+		).Err(); err != nil {
+			m.log.Error().Err(err).Msg("failed to remove keys")
+		}
+	}
+
+	m.log.Info().Int("count", len(keys)).Msg("removed keys")
 	return
 }
 

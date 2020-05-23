@@ -24,6 +24,7 @@ func init() {
 }
 
 func main() {
+	var err error
 	token := flag.String("token", "", "token the bot will use to authenticate")
 	flag.Parse()
 
@@ -50,8 +51,12 @@ func main() {
 			},
 		},
 	)
+	err = m.ClearCache()
+	if err != nil {
+		zlog.Panic().Err(err).Msg("Cold not clear cache")
+	}
 
-	err := m.Open()
+	err = m.Open()
 	if err != nil {
 		zlog.Panic().Err(err).Msg("Cold not start manager")
 	}
