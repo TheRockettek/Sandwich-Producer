@@ -68,9 +68,23 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		zlog.Error().Err(err).Msg("failed to save guild")
 	}
 
+	// As we remove the guild from m.Unavailables, if the bot resumed we do
+	// not know if the bot was removed from the guild but as we store the guild
+	// in cache, if the guild is in the cache we know it was not removed from
+	// the guild so we can handle as it going available again. The only caveate
+	// would be being removed during resume however those events should be refired.
+	ic, err := m.Configuration.redisClient.HExists(
+		ctx,
+		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+		guild.ID,
+	).Result()
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to check for guild in cache")
+	}
+
 	// Check if guild was previously unavailable so we can differentiate
 	// between if the bot was just invited or not
-	if un, uo := m.Unavailables[guild.ID]; un {
+	if un, uo := m.Unavailables[guild.ID]; un || ic {
 		// If the value was true, this means that during the bot running
 		// the guild had previously gone down and is now available again.
 		if uo {
@@ -90,8 +104,6 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 			Data: guild,
 		}
 	}
-	// Remove guild from unavailables as we do not need it anymore
-	delete(m.Unavailables, guild.ID)
 
 	return ok, se
 }

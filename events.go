@@ -186,6 +186,28 @@ type GuildIntegrationsUpdate struct {
 	GuildID string `json:"guild_id"`
 }
 
+// InviteCreate is the data for an InviteCreate event.
+type InviteCreate struct {
+	ChannelID      string        `json:"channel_id"`
+	GuildID        string        `json:"guild_id,omitempty"`
+	Inviter        *User         `json:"inviter,omitempty"`
+	Code           string        `json:"code"`
+	CreatedAt      Timestamp     `json:"created_at"`
+	MaxAge         time.Duration `json:"max_age"`
+	MaxUses        int           `json:"max_uses"`
+	TargetUser     *User         `json:"target_user"`
+	TargetUserType int           `json:"target_user_type,omitempty"`
+	Temporary      bool          `son:"temporary"`
+	Uses           int           `json:"uses"`
+}
+
+// InviteDelete is the data for an InviteDelete event.
+type InviteDelete struct {
+	ChannelID string `json:"channel_id"`
+	GuildID   string `json:"guild_id,omitempty"`
+	Code      string `json:"code"`
+}
+
 // MessageAck is the data for a MessageAck event.
 type MessageAck struct {
 	MessageID string `json:"message_id"`
