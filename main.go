@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 	"github.com/rs/zerolog"
 )
 

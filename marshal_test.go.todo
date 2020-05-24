@@ -1,0 +1,137 @@
+package main
+
+import (
+	"encoding/json"
+	"reflect"
+	"testing"
+
+	"github.com/go-redis/redis/v8"
+)
+
+var configuration = managerConfiguration{
+	redisOptions: &redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	},
+}
+
+func TestGuildMarshal(t *testing.T) {
+	var guild MarshalGuild
+	var rawData json.RawMessage
+	var err error
+
+	guild = MarshalGuild{}
+	rawData = json.RawMessage([]byte(`{}`))
+	if err = guild.Create(rawData); err != nil {
+		t.Error(err)
+	}
+
+	guild = MarshalGuild{}
+	rawData = json.RawMessage([]byte(`{`))
+	if err = guild.Create(rawData); err == nil {
+		t.Error(err)
+	}
+
+	guild = MarshalGuild{}
+	rawData = json.RawMessage([]byte(`{"roles": [{"id": "1", "name": "roleTest"}],"emojis": [{"id": "2", "name": "emojiTest"}],"channels": [{"id": "3", "name": "channelTest"}]}`))
+	if err = guild.Create(rawData); err != nil {
+		t.Error(err)
+	}
+
+	if guild.Roles[0] != "1" {
+		t.Errorf("guild.Roles is not equal to ['1']")
+	}
+
+	if guild.Emojis[0] != "2" {
+		t.Error("guild.Emojis is not equal to ['2']")
+	}
+
+	if guild.Channels[0] != "3" {
+		t.Error("guild.Channels is not equal to ['3']")
+	}
+
+	if !reflect.DeepEqual(guild.RoleValues[0], &Role{
+		ID:   "1",
+		Name: "roleTest",
+	}) {
+		t.Error("guild.RoleValues is not equal")
+	}
+
+	if !reflect.DeepEqual(guild.EmojiValues[0], &Emoji{
+		ID:   "2",
+		Name: "emojiTest",
+	}) {
+		t.Error("guild.EmojiValues is not equal")
+	}
+
+	if !reflect.DeepEqual(guild.ChannelValues[0], &Channel{
+		ID:   "3",
+		Name: "channelTest",
+	}) {
+		t.Error("guild.ChannelValues is not equal")
+	}
+}
+
+func TestReadyMarshaler(t *testing.T) {
+	m := NewManager("", "", configuration, zlog, UpdateStatusData{})
+
+	ok, _ := readyMarshaler(m, Event{
+		RawData: json.RawMessage([]byte(`{"guilds":[{"id":"1", "unavailable":true}]}`)),
+	})
+
+	if ok != true {
+		t.Error("shardReadyMarshaler returned false")
+	}
+	if _, ok := m.Unavailables["1"]; ok == false {
+		t.Error("guild is not in unavailables")
+	}
+}
+
+func TestCreateMarshaler(t *testing.T) {
+	var err error
+	var ok bool
+	var se StreamEvent
+
+	m := NewManager("", "", configuration, zlog, UpdateStatusData{})
+	err = m.ClearCache()
+	if err != nil {
+		t.Error("failed to clear cache")
+	}
+
+	ok, _ = readyMarshaler(m, Event{
+		RawData: json.RawMessage([]byte(`{"guilds":[{"id":"1", "unavailable":true}]}`)),
+	})
+
+	// test guild available (available)
+	zlog.Info().Msg("Testing guild available")
+	ok, se = guildCreateMarshaler(m, Event{
+		RawData: json.RawMessage([]byte(`{"id":"1", "unavailable":false}`)),
+	})
+	if ok != true {
+		t.Error("guildCreateMarshaler returned false for ok")
+	}
+	if se.Type != "GUILD_AVAILABLE" {
+		t.Errorf("expected GUILD_AVAILABLE event type, got %s", se.Type)
+	}
+
+	zlog.Info().Msg("Deleting guild")
+	guildDeleteMarshaler(m, Event{
+		RawData: json.RawMessage([]byte(`{"id":"1", "unavailable":false}`)),
+	})
+
+	// test guild join
+	zlog.Info().Msg("Testing guild join")
+	ok, se = guildCreateMarshaler(m, Event{
+		RawData: json.RawMessage([]byte(`{"id":"1", "unavailable":false}`)),
+	})
+	if ok != true {
+		t.Error("guildCreateMarshaler returned false for ok")
+	}
+	if se.Type != "GUILD_JOIN" {
+		t.Errorf("expected GUILD_JOIN event type, got %s", se.Type)
+	}
+
+	// test guild join (join)
+	// test guild going unavailable then join (available)
+}

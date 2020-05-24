@@ -50,6 +50,8 @@ func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		m.Unavailables[g.ID] = false
 	}
 
+	ok = true
+
 	return
 }
 
@@ -81,7 +83,6 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	if err != nil {
 		zlog.Error().Err(err).Msg("failed to check for guild in cache")
 	}
-
 	// Check if guild was previously unavailable so we can differentiate
 	// between if the bot was just invited or not
 	if un, uo := m.Unavailables[guild.ID]; un || ic {
@@ -112,8 +113,6 @@ func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	var err error
 	var rawData string
 
-	println(string(e.RawData))
-
 	partialGuild := UnavailableGuild{}
 	err = json.Unmarshal(e.RawData, &partialGuild)
 	if err != nil {
@@ -121,16 +120,10 @@ func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		return
 	}
 
-	if rawData, err = m.Configuration.redisClient.HGet(
-		ctx,
-		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
-		partialGuild.ID,
-	).Result(); err != nil {
-		zlog.Error().Err(err).Msg("failed to remove guild")
-	}
-
 	guild := MarshalGuild{}
 	guild.From([]byte(rawData))
+
+	delete(m.Unavailables, partialGuild.ID)
 
 	if partialGuild.Unavailable {
 		// guild has gone down
@@ -142,6 +135,14 @@ func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		}
 	} else {
 		// user has left guild
+		if err = m.Configuration.redisClient.HDel(
+			ctx,
+			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+			partialGuild.ID,
+		).Err(); err != nil {
+			zlog.Error().Err(err).Msg("failed to remove guild")
+		}
+
 		if len(guild.Roles) > 0 {
 			if err = m.Configuration.redisClient.HDel(
 				ctx,

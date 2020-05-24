@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/stan.go"
 	"github.com/rs/zerolog"
@@ -308,6 +308,10 @@ func (m *Manager) Close() {
 	for _, s := range m.Sessions {
 		s.Close()
 	}
+
+	// Allow time for late dispatchers
+	time.Sleep(time.Second)
+
 	for len(m.eventChannel) > 0 && len(m.produceChannel) > 0 {
 		m.log.Info().Int("event", len(m.eventChannel)).Int("produce", len(m.produceChannel)).Msg("Waiting for channels...")
 		time.Sleep(time.Second)
