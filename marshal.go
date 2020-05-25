@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/vmihailenco/msgpack"
 )
 
 var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent))
@@ -83,16 +85,18 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	if err != nil {
 		zlog.Error().Err(err).Msg("failed to check for guild in cache")
 	}
-	// Check if guild was previously unavailable so we can differentiate
-	// between if the bot was just invited or not
-	if un, uo := m.Unavailables[guild.ID]; un || ic {
-		// If the value was true, this means that during the bot running
-		// the guild had previously gone down and is now available again.
-		if uo {
+	// Check if guild is in the pending availability map or is currently in cache.
+	if un, uo := m.Unavailables[guild.ID]; uo || ic {
+		// If the guild was unavailable, this means it is now available so fire the
+		// available event. If it is in the cache it also means that it is likely to
+		// be available again incase we did not get the unavailable payload. If neither,
+		// this just means it was initial GUILD_CREATE event when the bot is connecting
+		// and we can just ignore it.
+		if un || ic {
 			ok = true
 			se = StreamEvent{
 				Type: "GUILD_AVAILABLE",
-				Data: guild,
+				Data: &guild,
 			}
 		} else {
 			ok = false
@@ -102,7 +106,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		ok = true
 		se = StreamEvent{
 			Type: "GUILD_JOIN",
-			Data: guild,
+			Data: &guild,
 		}
 	}
 
@@ -184,8 +188,106 @@ func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		ok = true
 		se = StreamEvent{
 			Type: "GUILD_REMOVE",
-			Data: guild,
+			Data: &guild,
 		}
+	}
+
+	return
+}
+
+func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	updatedGuild := MarshalGuild{}
+	err = updatedGuild.Create(e.RawData)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to unmarshal guild")
+		return
+	}
+
+	guildData, err := m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+		updatedGuild.ID,
+	).Result()
+	if err != nil {
+		zlog.Error().Err(err).Msgf("GUILD_UPDATE referenced unknown guild %d", updatedGuild.ID)
+	}
+
+	guild := MarshalGuild{}
+	if err = guild.From([]byte(guildData)); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal guild from redis")
+	}
+
+	if err = updatedGuild.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to update guild")
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: "GUILD_UPDATE",
+		Data: struct {
+			Before *MarshalGuild `msgpack:"before"`
+			After  *MarshalGuild `msgpack:"after"`
+		}{
+			Before: &guild,
+			After:  &updatedGuild,
+		},
+	}
+
+	return
+}
+
+func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	// The GuildRoleCreate struct contains the role and guild id
+	guildRole := GuildRoleCreate{}
+	err = json.Unmarshal(e.RawData, &guildRole)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to unmarshal guild role create payload")
+		return
+	}
+
+	guildData, err := m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+		guildRole.GuildID,
+	).Result()
+	if err != nil {
+		zlog.Error().Err(err).Msgf("GUILD_ROLE_CREATE referenced unknown guild %d", guildRole.GuildID)
+	}
+
+	guild := MarshalGuild{}
+	if err = guild.From([]byte(guildData)); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal guild from redis")
+	}
+
+	// Add the role id to the guild's role ID list then save the role.
+	// We will still add the role id to the guild struct as we could fetch
+	// it later on and not have the state go stale.
+	if ma, err := msgpack.Marshal(guildRole.Role); err == nil {
+		if err = m.Configuration.redisClient.HSet(
+			ctx,
+			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
+			guildRole.Role.ID,
+			ma,
+		).Err(); err != nil {
+			zlog.Error().Err(err).Msg("failed to remove roles")
+		}
+	} else {
+		m.log.Error().Err(err).Msg("failed to marshal role")
+	}
+
+	guild.Roles = append(guild.Roles, guildRole.Role.ID)
+	if err = guild.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to save role id to guild on redis")
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: "GUILD_ROLE_UPDATE",
+		Data: &guildRole.Role,
 	}
 
 	return
@@ -201,7 +303,7 @@ func init() {
 	addMarshaler("SHARD_DISCONNECT", shardDisconnectMarshaler)
 
 	addMarshaler("GUILD_CREATE", guildCreateMarshaler)
-	// GUILD_UPDATE
+	addMarshaler("GUILD_UPDATE", guildUpdateMarshaler)
 	addMarshaler("GUILD_DELETE", guildDeleteMarshaler)
 
 	// GUILD_ROLE_CREATE
