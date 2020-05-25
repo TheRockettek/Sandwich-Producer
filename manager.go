@@ -302,6 +302,81 @@ func (m *Manager) ForwardProduce() {
 	}
 }
 
+func (m *Manager) getGuild(id string) (g MarshalGuild, err error) {
+	guildData, err := m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+		id,
+	).Result()
+	if err != nil {
+		m.log.Error().Err(err).Msg("getGuild failed to retrieve guild")
+		return
+	}
+
+	g = MarshalGuild{}
+	if err = g.From([]byte(guildData)); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal guild from redis")
+		return
+	}
+
+	return
+}
+
+func (m *Manager) getChannel(id string) (c Channel, err error) {
+	channelData, err := m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+		id,
+	).Result()
+	if err != nil {
+		m.log.Error().Err(err).Msg("getChannel failed to retrieve channel")
+		return
+	}
+
+	c = Channel{}
+	if err = msgpack.Unmarshal([]byte(channelData), &c); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal channel from redis")
+	}
+
+	return
+}
+
+func (m *Manager) getRole(guildID string, roleID string) (r Role, err error) {
+	roleData, err := m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guildID),
+		roleID,
+	).Result()
+	if err != nil {
+		m.log.Error().Err(err).Msg("getRole failed to retrieve role")
+	}
+
+	r = Role{}
+	if err = msgpack.Unmarshal([]byte(roleData), &r); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal role from redis")
+	}
+
+	return
+}
+
+func (m *Manager) getEmoji(id string) (e Emoji, err error) {
+	emojiData, err := m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+		id,
+	).Result()
+	if err != nil {
+		m.log.Error().Err(err).Msg("getEmoji failed to retrieve emoji")
+	}
+
+	e = Emoji{}
+	if err = msgpack.Unmarshal([]byte(emojiData), &e); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal guild")
+	}
+
+	return
+}
+
 // Close gracefully closes sessions and ensures all messages are sent before closing
 func (m *Manager) Close() {
 	m.log.Info().Msg("Closing sessions...")

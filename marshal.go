@@ -206,18 +206,9 @@ func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		return
 	}
 
-	guildData, err := m.Configuration.redisClient.HGet(
-		ctx,
-		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
-		updatedGuild.ID,
-	).Result()
+	guild, err := m.getGuild(updatedGuild.ID)
 	if err != nil {
 		zlog.Error().Err(err).Msgf("GUILD_UPDATE referenced unknown guild %d", updatedGuild.ID)
-	}
-
-	guild := MarshalGuild{}
-	if err = guild.From([]byte(guildData)); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild from redis")
 	}
 
 	if err = updatedGuild.Save(m); err != nil {
@@ -250,18 +241,9 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		return
 	}
 
-	guildData, err := m.Configuration.redisClient.HGet(
-		ctx,
-		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
-		guildRole.GuildID,
-	).Result()
+	guild, err := m.getGuild(guildRole.GuildID)
 	if err != nil {
-		zlog.Error().Err(err).Msgf("GUILD_ROLE_CREATE referenced unknown guild %d", guildRole.GuildID)
-	}
-
-	guild := MarshalGuild{}
-	if err = guild.From([]byte(guildData)); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild from redis")
+		m.log.Error().Err(err).Msgf("GUILD_ROLE_CREATE referenced unknown guild %s", guildRole.GuildID)
 	}
 
 	// Add the role id to the guild's role ID list then save the role.
@@ -294,6 +276,71 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
+func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	// The GuildRoleDelete struct contains the role and guild id
+	guildRole := GuildRoleDelete{}
+	err = json.Unmarshal(e.RawData, &guildRole)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to unmarshal guild role create payload")
+		return
+	}
+
+	guild, err := m.getGuild(guildRole.GuildID)
+	if err != nil {
+		m.log.Error().Err(err).Msgf("GUILD_ROLE_DELETE referenced unknown guild %s", guildRole.GuildID)
+	}
+
+	// Retrieve origional role data to pass to StreamEvent
+	role, err := m.getRole(guildRole.GuildID, guildRole.RoleID)
+	if err != nil {
+		m.log.Error().Err(err).Msgf("GUILD_ROLE_DELETE referenced unknown role %s for guild %s", guildRole.RoleID, guildRole.GuildID)
+	}
+
+	if err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
+		guildRole.RoleID,
+	).Err(); err != nil {
+		zlog.Error().Err(err).Msg("failed to remove role")
+	}
+
+	// We have to construct a new array of strings to remove the guild that was deleted
+	// #justGoThings
+	newRoles := make([]string, 0)
+	for _, id := range guild.Roles {
+		if id != guildRole.RoleID {
+			newRoles = append(newRoles, id)
+		}
+	}
+
+	guild.Roles = newRoles
+	if err := guild.Save(m); err != nil {
+		zlog.Error().Err(err).Msg("failed to save guild on redis")
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: "GUILD_ROLE_DELETE",
+		Data: struct {
+			Role    *Role
+			GuildID string
+		}{
+			&role,
+			guild.ID,
+		},
+	}
+
+	return
+}
+
+func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	return
+}
+
 // func customEventMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 // }
 
@@ -308,7 +355,7 @@ func init() {
 	addMarshaler("GUILD_DELETE", guildDeleteMarshaler)
 
 	addMarshaler("GUILD_ROLE_CREATE", guildRoleCreateMarshaler)
-	// GUILD_ROLE_DELETE
+	addMarshaler("GUILD_ROLE_DELETE", guildRoleDeleteMarshaler)
 	// GUILD_ROLE_UPDATE
 
 	// CHANNEL_CREATE
