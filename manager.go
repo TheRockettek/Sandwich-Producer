@@ -288,7 +288,6 @@ func (m *Manager) ForwardProduce() {
 	}
 
 	for e = range m.produceChannel {
-
 		ep, err = msgpack.Marshal(e)
 		if err != nil {
 			m.log.Warn().Err(err).Msg("failed to marshal stream event")
@@ -384,13 +383,17 @@ func (m *Manager) Close() {
 		s.Close()
 	}
 
-	// Allow time for late dispatchers
 	time.Sleep(time.Second)
-
-	for len(m.eventChannel) > 0 && len(m.produceChannel) > 0 {
-		m.log.Info().Int("event", len(m.eventChannel)).Int("produce", len(m.produceChannel)).Msg("Waiting for channels...")
+	for len(m.eventChannel) > 0 {
+		m.log.Info().Int("event", len(m.eventChannel)).Msg("Waiting for event channel queue...")
 		time.Sleep(time.Second)
 	}
 	close(m.eventChannel)
+
+	time.Sleep(time.Second)
+	for len(m.produceChannel) > 0 {
+		m.log.Info().Int("produce", len(m.produceChannel)).Msg("Waiting for produce channel queue...")
+		time.Sleep(time.Second)
+	}
 	close(m.produceChannel)
 }
