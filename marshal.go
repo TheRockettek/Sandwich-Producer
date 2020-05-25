@@ -67,11 +67,6 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		return
 	}
 
-	err = guild.Save(m)
-	if err != nil {
-		zlog.Error().Err(err).Msg("failed to save guild")
-	}
-
 	// As we remove the guild from m.Unavailables, if the bot resumed we do
 	// not know if the bot was removed from the guild but as we store the guild
 	// in cache, if the guild is in the cache we know it was not removed from
@@ -82,6 +77,12 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
 		guild.ID,
 	).Result()
+
+	err = guild.Save(m)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to save guild")
+	}
+
 	if err != nil {
 		zlog.Error().Err(err).Msg("failed to check for guild in cache")
 	}
