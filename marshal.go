@@ -338,6 +338,45 @@ func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	var err error
 
+	guildRole := GuildRoleCreate{}
+	err = json.Unmarshal(e.RawData, &guildRole)
+	if err != nil {
+		zlog.Error().Err(err).Msg("failed to unmarshal guild role create payload")
+		return
+	}
+
+	println(guildRole.Role.Name)
+
+	role, err := m.getRole(guildRole.GuildID, guildRole.Role.ID)
+	if err != nil {
+		zlog.Error().Err(err).Msgf("GUILD_ROLE_UPDATE referenced unknown role %s in guild %s", guildRole.Role.ID, guildRole.GuildID)
+	}
+
+	roleData, err := msgpack.Marshal(guildRole.Role)
+	if err != nil {
+		m.log.Error().Err(err).Msg("failed to marshal role")
+	}
+	if err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guildRole.GuildID),
+		guildRole.Role.ID,
+		roleData,
+	).Err(); err != nil {
+		m.log.Error().Err(err).Msg("failed to set roles")
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: "ROLE_UPDATE",
+		Data: struct {
+			Before *Role `msgpack:"before"`
+			After  *Role `msgpack:"after"`
+		}{
+			Before: &role,
+			After:  guildRole.Role,
+		},
+	}
+
 	return
 }
 
@@ -356,7 +395,7 @@ func init() {
 
 	addMarshaler("GUILD_ROLE_CREATE", guildRoleCreateMarshaler)
 	addMarshaler("GUILD_ROLE_DELETE", guildRoleDeleteMarshaler)
-	// GUILD_ROLE_UPDATE
+	addMarshaler("GUILD_ROLE_UPDATE", guildRoleUpdateMarshaler)
 
 	// CHANNEL_CREATE
 	// CHANNEL_UPDATE
