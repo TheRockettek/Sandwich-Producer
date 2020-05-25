@@ -163,7 +163,7 @@ func (mg *MarshalGuild) Save(m *Manager) (err error) {
 	var ma interface{}
 
 	// We create a map of keys and values that redis will use instead
-	// of creating multiple HMSet requests.
+	// of creating multiple HSet requests.
 
 	guildRoles := make(map[string]interface{})
 	for _, r := range mg.RoleValues {
@@ -175,7 +175,7 @@ func (mg *MarshalGuild) Save(m *Manager) (err error) {
 	}
 
 	if len(guildRoles) > 0 {
-		if err = m.Configuration.redisClient.HMSet(
+		if err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, mg.ID),
 			guildRoles,
@@ -194,7 +194,7 @@ func (mg *MarshalGuild) Save(m *Manager) (err error) {
 	}
 
 	if len(guildChannels) > 0 {
-		if err = m.Configuration.redisClient.HMSet(
+		if err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
 			guildChannels,
@@ -213,7 +213,7 @@ func (mg *MarshalGuild) Save(m *Manager) (err error) {
 	}
 
 	if len(guildEmojis) > 0 {
-		if err = m.Configuration.redisClient.HMSet(
+		if err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
 			guildEmojis,
@@ -223,7 +223,7 @@ func (mg *MarshalGuild) Save(m *Manager) (err error) {
 	}
 
 	if ma, err = msgpack.Marshal(mg); err == nil {
-		if err = m.Configuration.redisClient.HMSet(
+		if err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
 			mg.ID,

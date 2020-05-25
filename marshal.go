@@ -288,7 +288,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	ok = true
 	se = StreamEvent{
 		Type: "GUILD_ROLE_UPDATE",
-		Data: &guildRole.Role,
+		Data: &guildRole,
 	}
 
 	return
@@ -307,7 +307,7 @@ func init() {
 	addMarshaler("GUILD_UPDATE", guildUpdateMarshaler)
 	addMarshaler("GUILD_DELETE", guildDeleteMarshaler)
 
-	// GUILD_ROLE_CREATE
+	addMarshaler("GUILD_ROLE_CREATE", guildRoleCreateMarshaler)
 	// GUILD_ROLE_DELETE
 	// GUILD_ROLE_UPDATE
 
