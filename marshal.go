@@ -435,8 +435,8 @@ func init() {
 	addMarshaler("GUILD_ROLE_UPDATE", guildRoleUpdateMarshaler)
 
 	addMarshaler("CHANNEL_CREATE", guildChannelCreateMarshaler)
-	// CHANNEL_UPDATE
-	// CHANNEL_DELETE
+	addMarshaler("CHANNEL_UPDATE", guildChannelUpdateMarshaler)
+	addMarshaler("CHANNEL_DELETE", guildChannelDeleteMarshaler)
 	// CHANNEL_PINS_UPDATE
 
 	// GUILD_MEMBER_ADD
