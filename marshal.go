@@ -235,8 +235,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 
 	// The GuildRoleCreate struct contains the role and guild id
 	guildRole := GuildRoleCreate{}
-	err = json.Unmarshal(e.RawData, &guildRole)
-	if err != nil {
+	if err = json.Unmarshal(e.RawData, &guildRole); err != nil {
 		zlog.Error().Err(err).Msg("failed to unmarshal guild role create payload")
 		return
 	}
@@ -256,7 +255,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 			guildRole.Role.ID,
 			ma,
 		).Err(); err != nil {
-			zlog.Error().Err(err).Msg("failed to remove roles")
+			m.log.Error().Err(err).Msg("failed to add role to redis")
 		}
 	} else {
 		m.log.Error().Err(err).Msg("failed to marshal role")
@@ -345,8 +344,6 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		return
 	}
 
-	println(guildRole.Role.Name)
-
 	role, err := m.getRole(guildRole.GuildID, guildRole.Role.ID)
 	if err != nil {
 		zlog.Error().Err(err).Msgf("GUILD_ROLE_UPDATE referenced unknown role %s in guild %s", guildRole.Role.ID, guildRole.GuildID)
@@ -380,6 +377,49 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
+func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	guildChannel := Channel{}
+	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
+		zlog.Error().Err(err).Msg("failed to unmarshal guild channel create payload")
+		return
+	}
+
+	// Get the guild object to add the channel ID
+	guild, err := m.getGuild(guildChannel.GuildID)
+	if err != nil {
+		m.log.Error().Err(err).Msgf("GUILD_CHANNEL_CREATE referenced unknown guild %s", guildChannel.GuildID)
+	}
+
+	// Marshal the channel then add it to redis if successful
+	if ma, err := msgpack.Marshal(guildChannel); err == nil {
+		if err = m.Configuration.redisClient.HSet(
+			ctx,
+			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+			guildChannel.ID,
+			ma,
+		).Err(); err != nil {
+			m.log.Error().Err(err).Msg("failed to add channel")
+		}
+	} else {
+		m.log.Error().Err(err).Msg("failed to marshal channel")
+	}
+
+	guild.Channels = append(guild.Channels, guildChannel.ID)
+	if err = guild.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to save channel id to guild on redis")
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: "GUILD_CHANNEL_CREATE",
+		Data: &guildChannel,
+	}
+
+	return
+}
+
 // func customEventMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 // }
 
@@ -397,7 +437,7 @@ func init() {
 	addMarshaler("GUILD_ROLE_DELETE", guildRoleDeleteMarshaler)
 	addMarshaler("GUILD_ROLE_UPDATE", guildRoleUpdateMarshaler)
 
-	// CHANNEL_CREATE
+	addMarshaler("CHANNEL_CREATE", guildChannelCreateMarshaler)
 	// CHANNEL_UPDATE
 	// CHANNEL_DELETE
 	// CHANNEL_PINS_UPDATE
