@@ -2,9 +2,9 @@ import re
 import os
 
 # Converts structures with json to also include a msgpack copy converting
-# GuildID string `json:"guild_id" msgpack:"guild_id" msgpack:"guild_id"`
+# GuildID string \`json:"guild_id"\`
 # into
-# GuildID string `json:"guild_id" msgpack:"guild_id" msgpack:"guild_id" msgpack:"guild_id"`
+# GuildID string \`json:"guild_id" msgpack:"guild_id"\`
 # and will ignore ones that have already got msgpack
 
 rgx = re.compile(r"`((json|msgpack):\"(\S+)\")\s?((json|msgpack):\"(\S+)\")?`")
