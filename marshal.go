@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 )
 
 var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent))
@@ -171,16 +172,20 @@ func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		m.log.Error().Err(err).Msg("failed to update guild")
 	}
 
-	ok = true
-	se = StreamEvent{
-		Type: "GUILD_UPDATE",
-		Data: struct {
-			Before *MarshalGuild `msgpack:"before"`
-			After  *MarshalGuild `msgpack:"after"`
-		}{
-			Before: &guild,
-			After:  &updatedGuild,
-		},
+	if !reflect.DeepEqual(&guild, &updatedGuild) {
+		ok = true
+		se = StreamEvent{
+			Type: "GUILD_UPDATE",
+			Data: struct {
+				Before *MarshalGuild `msgpack:"before"`
+				After  *MarshalGuild `msgpack:"after"`
+			}{
+				Before: &guild,
+				After:  &updatedGuild,
+			},
+		}
+	} else {
+		m.log.Info().Msg("not creating GUILD_UPDATE as the before and after seem equal")
 	}
 
 	return
@@ -215,7 +220,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 
 	ok = true
 	se = StreamEvent{
-		Type: "GUILD_ROLE_UPDATE",
+		Type: "GUILD_ROLE_CREATE",
 		Data: &guildRole,
 	}
 
@@ -295,16 +300,20 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		m.log.Error().Err(err).Msg("failed to add role to redis")
 	}
 
-	ok = true
-	se = StreamEvent{
-		Type: "ROLE_UPDATE",
-		Data: struct {
-			Before *Role `msgpack:"before"`
-			After  *Role `msgpack:"after"`
-		}{
-			Before: &role,
-			After:  guildRole.Role,
-		},
+	if !reflect.DeepEqual(&role, guildRole.Role) {
+		ok = true
+		se = StreamEvent{
+			Type: "GUILD_ROLE_UPDATE",
+			Data: struct {
+				Before *Role `msgpack:"before"`
+				After  *Role `msgpack:"after"`
+			}{
+				Before: &role,
+				After:  guildRole.Role,
+			},
+		}
+	} else {
+		m.log.Info().Msg("not creating ROLE_UPDATE as the before and after seem equal")
 	}
 
 	return
@@ -362,16 +371,20 @@ func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 		m.log.Error().Err(err).Msg("failed to update guild")
 	}
 
-	ok = true
-	se = StreamEvent{
-		Type: "GUILD_CHANNEL_UPDATE",
-		Data: struct {
-			Before *Channel `msgpack:"before"`
-			After  *Channel `msgpack:"after"`
-		}{
-			Before: &channel,
-			After:  &updatedChannel,
-		},
+	if !reflect.DeepEqual(&channel, &updatedChannel) {
+		ok = true
+		se = StreamEvent{
+			Type: "GUILD_CHANNEL_UPDATE",
+			Data: struct {
+				Before *Channel `msgpack:"before"`
+				After  *Channel `msgpack:"after"`
+			}{
+				Before: &channel,
+				After:  &updatedChannel,
+			},
+		}
+	} else {
+		m.log.Info().Msg("not creating GUILD_CHANNEL_UPDATE as the before and after seem equal")
 	}
 
 	return
