@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"time"
+
+	"github.com/vmihailenco/msgpack"
 )
 
 // Valid GameType values
@@ -249,6 +252,17 @@ type UnavailableGuild struct {
 	Unavailable bool `json:"unavailable" msgpack:"unavailable"`
 }
 
+// Delete removes the guild object from redis
+func (ug *UnavailableGuild) Delete(m *Manager) (err error) {
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+		ug.ID,
+	).Err()
+
+	return
+}
+
 // A Guild holds all data related to a specific Discord Guild.  Guilds are also
 // sometimes referred to as Servers in the Discord client.
 type Guild struct {
@@ -415,6 +429,34 @@ type Channel struct {
 	RateLimitPerUser int `json:"rate_limit_per_user" msgpack:"rate_limit_per_user"`
 }
 
+// Save saves the Channel into redis
+func (c *Channel) Save(m *Manager) (err error) {
+	ma, err := msgpack.Marshal(c)
+	if err != nil {
+		return
+	}
+
+	err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+		c.ID,
+		ma,
+	).Err()
+
+	return
+}
+
+// Delete deletes the Channel from redis
+func (c *Channel) Delete(m *Manager) (err error) {
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+		c.ID,
+	).Err()
+
+	return
+}
+
 // A Role stores information about Discord guild member roles.
 type Role struct {
 	// The ID of the role.
@@ -445,10 +487,68 @@ type Role struct {
 	Permissions int `json:"permissions" msgpack:"permissions"`
 }
 
+// Save saves the GuildRole into redis
+func (r *Role) Save(guildID string, m *Manager) (err error) {
+	ma, err := msgpack.Marshal(r)
+	if err != nil {
+		return
+	}
+
+	if err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guildID),
+		r.ID,
+		ma,
+	).Err(); err != nil {
+		return
+	}
+
+	return
+}
+
+// Delete removes the emoji from redis
+func (r *Role) Delete(guildID string, m *Manager) (err error) {
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guildID),
+		r.ID,
+	).Err()
+
+	return
+}
+
 // A GuildRole stores data for guild roles.
 type GuildRole struct {
 	Role    *Role  `json:"role" msgpack:"role"`
 	GuildID string `json:"guild_id" msgpack:"guild_id"`
+}
+
+// Save saves the GuildRole into redis
+func (gr *GuildRole) Save(m *Manager) (err error) {
+	ma, err := msgpack.Marshal(gr.Role)
+	if err != nil {
+		return
+	}
+
+	err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, gr.GuildID),
+		gr.Role.ID,
+		ma,
+	).Err()
+
+	return
+}
+
+// Delete removes the emoji from redis
+func (gr *GuildRole) Delete(m *Manager) (err error) {
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, gr.GuildID),
+		gr.Role.ID,
+	).Err()
+
+	return
 }
 
 // Emoji struct holds data related to Emoji's
@@ -460,6 +560,35 @@ type Emoji struct {
 	RequireColons bool     `json:"require_colons" msgpack:"require_colons"`
 	Animated      bool     `json:"animated" msgpack:"animated"`
 	Available     bool     `json:"available" msgpack:"available"`
+}
+
+// Save saves the emoji into redis
+func (e *Emoji) Save(m *Manager) (err error) {
+	ma, err := msgpack.Marshal(e)
+	if err != nil {
+		return
+	}
+
+	if err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+		e.ID,
+		ma,
+	).Err(); err != nil {
+		return
+	}
+
+	return
+}
+
+// Delete removes the emoji from redis
+func (e *Emoji) Delete(m *Manager) (err error) {
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+		e.ID,
+	).Err()
+	return
 }
 
 // A Message stores all data related to a specific Discord message.

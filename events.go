@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -167,6 +168,17 @@ type GuildRoleUpdate struct {
 type GuildRoleDelete struct {
 	RoleID  string `json:"role_id" msgpack:"role_id"`
 	GuildID string `json:"guild_id" msgpack:"guild_id"`
+}
+
+// Delete removes the role from redis
+func (grd *GuildRoleDelete) Delete(m *Manager) (err error) {
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, grd.GuildID),
+		grd.RoleID,
+	).Err()
+
+	return
 }
 
 // A GuildEmojisUpdate is the data for a guild emoji update event.

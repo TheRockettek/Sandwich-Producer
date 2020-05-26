@@ -158,6 +158,47 @@ func (mg *MarshalGuild) From(data []byte) (err error) {
 	return
 }
 
+// Delete removes the guild object from redis
+func (mg *MarshalGuild) Delete(m *Manager) (err error) {
+	if len(mg.Roles) > 0 {
+		if err = m.Configuration.redisClient.HDel(
+			ctx,
+			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, mg.ID),
+			mg.Roles...,
+		).Err(); err != nil {
+			return
+		}
+	}
+
+	if len(mg.Channels) > 0 {
+		if err = m.Configuration.redisClient.HDel(
+			ctx,
+			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+			mg.Channels...,
+		).Err(); err != nil {
+			return
+		}
+	}
+
+	if len(mg.Emojis) > 0 {
+		if err = m.Configuration.redisClient.HDel(
+			ctx,
+			fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+			mg.Emojis...,
+		).Err(); err != nil {
+			return
+		}
+	}
+
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+		mg.ID,
+	).Err()
+
+	return
+}
+
 // Save will store the guild, role, channels and emojis on redis
 func (mg *MarshalGuild) Save(m *Manager) (err error) {
 	var ma interface{}

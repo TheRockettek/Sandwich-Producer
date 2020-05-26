@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/vmihailenco/msgpack"
 )
 
 var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent))
@@ -140,49 +138,7 @@ func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		}
 	} else {
 		// user has left guild
-		if err = m.Configuration.redisClient.HDel(
-			ctx,
-			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
-			partialGuild.ID,
-		).Err(); err != nil {
-			m.log.Error().Err(err).Msg("failed to remove guild")
-		}
-
-		if len(guild.Roles) > 0 {
-			if err = m.Configuration.redisClient.HDel(
-				ctx,
-				fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
-				guild.Roles...,
-			).Err(); err != nil {
-				m.log.Error().Err(err).Msg("failed to remove roles")
-			}
-		}
-
-		if len(guild.Channels) > 0 {
-			if err = m.Configuration.redisClient.HDel(
-				ctx,
-				fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
-				guild.Channels...,
-			).Err(); err != nil {
-				m.log.Error().Err(err).Msg("failed to remove channels")
-			}
-		}
-
-		if len(guild.Emojis) > 0 {
-			if err = m.Configuration.redisClient.HDel(
-				ctx,
-				fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
-				guild.Emojis...,
-			).Err(); err != nil {
-				m.log.Error().Err(err).Msg("failed to remove emojis")
-			}
-		}
-
-		if err = m.Configuration.redisClient.HDel(
-			ctx,
-			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
-			guild.ID,
-		).Err(); err != nil {
+		if err = guild.Delete(m); err != nil {
 			m.log.Error().Err(err).Msg("failed to remove guild")
 		}
 
@@ -208,7 +164,7 @@ func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 
 	guild, err := m.getGuild(updatedGuild.ID)
 	if err != nil {
-		m.log.Error().Err(err).Msgf("GUILD_UPDATE referenced unknown guild %d", updatedGuild.ID)
+		m.log.Error().Err(err).Msgf("GUILD_UPDATE referenced unknown guild %s", updatedGuild.ID)
 	}
 
 	if err = updatedGuild.Save(m); err != nil {
@@ -248,17 +204,8 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	// Add the role id to the guild's role ID list then save the role.
 	// We will still add the role id to the guild struct as we could fetch
 	// it later on and not have the state go stale.
-	if ma, err := msgpack.Marshal(guildRole.Role); err == nil {
-		if err = m.Configuration.redisClient.HSet(
-			ctx,
-			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
-			guildRole.Role.ID,
-			ma,
-		).Err(); err != nil {
-			m.log.Error().Err(err).Msg("failed to add role to redis")
-		}
-	} else {
-		m.log.Error().Err(err).Msg("failed to marshal role")
+	if err := guildRole.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to add role to redis")
 	}
 
 	guild.Roles = append(guild.Roles, guildRole.Role.ID)
@@ -278,7 +225,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	var err error
 
-	// The GuildRoleDelete struct contains the role and guild id
+	// The GuildRole struct contains the role and guild id
 	guildRole := GuildRoleDelete{}
 	err = json.Unmarshal(e.RawData, &guildRole)
 	if err != nil {
@@ -297,16 +244,11 @@ func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		m.log.Error().Err(err).Msgf("GUILD_ROLE_DELETE referenced unknown role %s for guild %s", guildRole.RoleID, guildRole.GuildID)
 	}
 
-	if err = m.Configuration.redisClient.HDel(
-		ctx,
-		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guild.ID),
-		guildRole.RoleID,
-	).Err(); err != nil {
+	if err = guildRole.Delete(m); err != nil {
 		m.log.Error().Err(err).Msg("failed to remove role")
 	}
 
-	// We have to construct a new array of strings to remove the guild that was deleted
-	// #justGoThings
+	// We have to construct a new array of strings to remove the role that was deleted
 	newRoles := make([]string, 0)
 	for _, id := range guild.Roles {
 		if id != guildRole.RoleID {
@@ -349,17 +291,8 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		m.log.Error().Err(err).Msgf("GUILD_ROLE_UPDATE referenced unknown role %s in guild %s", guildRole.Role.ID, guildRole.GuildID)
 	}
 
-	roleData, err := msgpack.Marshal(guildRole.Role)
-	if err != nil {
-		m.log.Error().Err(err).Msg("failed to marshal role")
-	}
-	if err = m.Configuration.redisClient.HSet(
-		ctx,
-		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, guildRole.GuildID),
-		guildRole.Role.ID,
-		roleData,
-	).Err(); err != nil {
-		m.log.Error().Err(err).Msg("failed to set roles")
+	if err = guildRole.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to add role to redis")
 	}
 
 	ok = true
@@ -393,17 +326,8 @@ func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 	}
 
 	// Marshal the channel then add it to redis if successful
-	if ma, err := msgpack.Marshal(guildChannel); err == nil {
-		if err = m.Configuration.redisClient.HSet(
-			ctx,
-			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
-			guildChannel.ID,
-			ma,
-		).Err(); err != nil {
-			m.log.Error().Err(err).Msg("failed to add channel")
-		}
-	} else {
-		m.log.Error().Err(err).Msg("failed to marshal channel")
+	if err := guildChannel.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to add channel to redis")
 	}
 
 	guild.Channels = append(guild.Channels, guildChannel.ID)
@@ -414,6 +338,79 @@ func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 	ok = true
 	se = StreamEvent{
 		Type: "GUILD_CHANNEL_CREATE",
+		Data: &guildChannel,
+	}
+
+	return
+}
+
+func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	updatedChannel := Channel{}
+	if err = json.Unmarshal(e.RawData, &updatedChannel); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal guild channel update payload")
+		return
+	}
+
+	channel, err := m.getChannel(updatedChannel.ID)
+	if err != nil {
+		m.log.Error().Err(err).Msgf("GUILD_CHANNEL_UPDATE referenced unknown channel %s in guild %s", updatedChannel.ID, updatedChannel.GuildID)
+	}
+
+	if err = updatedChannel.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to update guild")
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: "GUILD_CHANNEL_UPDATE",
+		Data: struct {
+			Before *Channel `msgpack:"before"`
+			After  *Channel `msgpack:"after"`
+		}{
+			Before: &channel,
+			After:  &updatedChannel,
+		},
+	}
+
+	return
+}
+
+func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	guildChannel := Channel{}
+	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal guild channel update payload")
+		return
+	}
+
+	guild, err := m.getGuild(guildChannel.GuildID)
+	if err != nil {
+		m.log.Error().Err(err).Msgf("GUILD_CHANNEL_UPDATE referenced unknown guild %s", guildChannel.GuildID)
+	}
+
+	if err = guildChannel.Delete(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to remove channel")
+	}
+
+	// We have to construct a new array of strings to remove the channel that was deleted
+	newChannels := make([]string, 0)
+	for _, id := range guild.Channels {
+		if id != guildChannel.ID {
+			newChannels = append(newChannels, id)
+		}
+	}
+
+	guild.Channels = newChannels
+	if err := guild.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to save guild on redis")
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: "GUILD_CHANNEL_DELETE",
 		Data: &guildChannel,
 	}
 
