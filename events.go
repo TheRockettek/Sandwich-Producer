@@ -24,69 +24,69 @@ type Event struct {
 
 // RequestGuildMembers is the data sent to discord when requesting guild members.
 type RequestGuildMembers struct {
-	Op   int `json:"op"`
+	Op   int `json:"op" msgpack:"op"`
 	Data struct {
-		GuildID string `json:"guild_id"`
-		Query   string `json:"query"`
-		Limit   int    `json:"limit"`
-	} `json:"d"`
+		GuildID string `json:"guild_id" msgpack:"guild_id"`
+		Query   string `json:"query" msgpack:"query"`
+		Limit   int    `json:"limit" msgpack:"limit"`
+	} `json:"d" msgpack:"d"`
 }
 
 // Resume is the packet that we send to discord.
 type Resume struct {
-	Op   int `json:"op"`
+	Op   int `json:"op" msgpack:"op"`
 	Data struct {
-		Token     string `json:"token"`
-		SessionID string `json:"session_id"`
-		Sequence  int64  `json:"seq"`
-	} `json:"d"`
+		Token     string `json:"token" msgpack:"token"`
+		SessionID string `json:"session_id" msgpack:"session_id"`
+		Sequence  int64  `json:"seq" msgpack:"seq"`
+	} `json:"d" msgpack:"d"`
 }
 
 // Hello is the data sent for the Hello event.
 type Hello struct {
-	HeartbeatInterval time.Duration `json:"heartbeat_interval"`
+	HeartbeatInterval time.Duration `json:"heartbeat_interval" msgpack:"heartbeat_interval"`
 }
 
 // Heartbeat is the data for the Heartbeat event.
 type Heartbeat struct {
-	Op   int   `json:"op"`
-	Data int64 `json:"d"`
+	Op   int   `json:"op" msgpack:"op"`
+	Data int64 `json:"d" msgpack:"d"`
 }
 
 // UpdateStatus is the data send to update the status.
 type UpdateStatus struct {
-	Op   int              `json:"op"`
-	Data UpdateStatusData `json:"d"`
+	Op   int              `json:"op" msgpack:"op"`
+	Data UpdateStatusData `json:"d" msgpack:"d"`
 }
 
 // A Ready stores all data for the websocket READY event.
 type Ready struct {
-	Version         int        `json:"v"`
-	SessionID       string     `json:"session_id"`
-	User            *User      `json:"user"`
-	PrivateChannels []*Channel `json:"private_channels"`
-	Guilds          []*Guild   `json:"guilds"`
+	Version         int        `json:"v" msgpack:"v"`
+	SessionID       string     `json:"session_id" msgpack:"session_id"`
+	User            *User      `json:"user" msgpack:"user"`
+	PrivateChannels []*Channel `json:"private_channels" msgpack:"private_channels"`
+	Guilds          []*Guild   `json:"guilds" msgpack:"guilds"`
 }
 
 // Identify is the data sent when identifying
 type Identify struct {
-	Op   int          `json:"op"`
-	Data identifyData `json:"d"`
+	Op   int          `json:"op" msgpack:"op"`
+	Data identifyData `json:"d" msgpack:"d"`
 }
 
 type identifyProperties struct {
-	OS      string `json:"$os"`
-	Browser string `json:"$browser"`
-	Device  string `json:"$device"`
+	OS      string `json:"$os" msgpack:"$os"`
+	Browser string `json:"$browser" msgpack:"$browser"`
+	Device  string `json:"$device" msgpack:"$device"`
 }
 
 type identifyData struct {
-	Token          string             `json:"token"`
-	Properties     identifyProperties `json:"properties"`
-	LargeThreshold int                `json:"large_threshold"`
-	Compress       bool               `json:"compress"`
-	Shard          *[2]int            `json:"shard,omitempty"`
-	Presence       UpdateStatusData   `json:"presence,omitempty"`
+	Token          string             `json:"token" msgpack:"token"`
+	Properties     identifyProperties `json:"properties" msgpack:"properties"`
+	LargeThreshold int                `json:"large_threshold" msgpack:"large_threshold"`
+	Compress       bool               `json:"compress" msgpack:"compress"`
+	Shard          *[2]int            `json:"shard,omitempty" msgpack:"shard,omitempty"`
+	Presence       UpdateStatusData   `json:"presence,omitempty" msgpack:"presence,omitempty"`
 }
 
 // ChannelCreate is the data for a ChannelCreate event.
@@ -106,9 +106,9 @@ type ChannelDelete struct {
 
 // ChannelPinsUpdate stores data for a ChannelPinsUpdate event.
 type ChannelPinsUpdate struct {
-	LastPinTimestamp string `json:"last_pin_timestamp"`
-	ChannelID        string `json:"channel_id"`
-	GuildID          string `json:"guild_id,omitempty"`
+	LastPinTimestamp string `json:"last_pin_timestamp" msgpack:"last_pin_timestamp"`
+	ChannelID        string `json:"channel_id" msgpack:"channel_id"`
+	GuildID          string `json:"guild_id,omitempty" msgpack:"guild_id,omitempty"`
 }
 
 // GuildCreate is the data for a GuildCreate event.
@@ -128,14 +128,14 @@ type GuildDelete struct {
 
 // GuildBanAdd is the data for a GuildBanAdd event.
 type GuildBanAdd struct {
-	User    *User  `json:"user"`
-	GuildID string `json:"guild_id"`
+	User    *User  `json:"user" msgpack:"user"`
+	GuildID string `json:"guild_id" msgpack:"guild_id"`
 }
 
 // GuildBanRemove is the data for a GuildBanRemove event.
 type GuildBanRemove struct {
-	User    *User  `json:"user"`
-	GuildID string `json:"guild_id"`
+	User    *User  `json:"user" msgpack:"user"`
+	GuildID string `json:"guild_id" msgpack:"guild_id"`
 }
 
 // GuildMemberAdd is the data for a GuildMemberAdd event.
@@ -165,53 +165,53 @@ type GuildRoleUpdate struct {
 
 // A GuildRoleDelete is the data for a GuildRoleDelete event.
 type GuildRoleDelete struct {
-	RoleID  string `json:"role_id"`
-	GuildID string `json:"guild_id"`
+	RoleID  string `json:"role_id" msgpack:"role_id"`
+	GuildID string `json:"guild_id" msgpack:"guild_id"`
 }
 
 // A GuildEmojisUpdate is the data for a guild emoji update event.
 type GuildEmojisUpdate struct {
-	GuildID string   `json:"guild_id"`
-	Emojis  []*Emoji `json:"emojis"`
+	GuildID string   `json:"guild_id" msgpack:"guild_id"`
+	Emojis  []*Emoji `json:"emojis" msgpack:"emojis"`
 }
 
 // A GuildMembersChunk is the data for a GuildMembersChunk event.
 type GuildMembersChunk struct {
-	GuildID string    `json:"guild_id"`
-	Members []*Member `json:"members"`
+	GuildID string    `json:"guild_id" msgpack:"guild_id"`
+	Members []*Member `json:"members" msgpack:"members"`
 }
 
 // GuildIntegrationsUpdate is the data for a GuildIntegrationsUpdate event.
 type GuildIntegrationsUpdate struct {
-	GuildID string `json:"guild_id"`
+	GuildID string `json:"guild_id" msgpack:"guild_id"`
 }
 
 // InviteCreate is the data for an InviteCreate event.
 type InviteCreate struct {
-	ChannelID      string        `json:"channel_id"`
-	GuildID        string        `json:"guild_id,omitempty"`
-	Inviter        *User         `json:"inviter,omitempty"`
-	Code           string        `json:"code"`
-	CreatedAt      Timestamp     `json:"created_at"`
-	MaxAge         time.Duration `json:"max_age"`
-	MaxUses        int           `json:"max_uses"`
-	TargetUser     *User         `json:"target_user"`
-	TargetUserType int           `json:"target_user_type,omitempty"`
-	Temporary      bool          `son:"temporary"`
-	Uses           int           `json:"uses"`
+	ChannelID      string        `json:"channel_id" msgpack:"channel_id"`
+	GuildID        string        `json:"guild_id,omitempty" msgpack:"guild_id,omitempty"`
+	Inviter        *User         `json:"inviter,omitempty" msgpack:"inviter,omitempty"`
+	Code           string        `json:"code" msgpack:"code"`
+	CreatedAt      Timestamp     `json:"created_at" msgpack:"created_at"`
+	MaxAge         time.Duration `json:"max_age" msgpack:"max_age"`
+	MaxUses        int           `json:"max_uses" msgpack:"max_uses"`
+	TargetUser     *User         `json:"target_user" msgpack:"target_user"`
+	TargetUserType int           `json:"target_user_type,omitempty" msgpack:"target_user_type,omitempty"`
+	Temporary      bool          `json:"temporary" msgpack:"temporary"`
+	Uses           int           `json:"uses" msgpack:"uses"`
 }
 
 // InviteDelete is the data for an InviteDelete event.
 type InviteDelete struct {
-	ChannelID string `json:"channel_id"`
-	GuildID   string `json:"guild_id,omitempty"`
-	Code      string `json:"code"`
+	ChannelID string `json:"channel_id" msgpack:"channel_id"`
+	GuildID   string `json:"guild_id,omitempty" msgpack:"guild_id,omitempty"`
+	Code      string `json:"code" msgpack:"code"`
 }
 
 // MessageAck is the data for a MessageAck event.
 type MessageAck struct {
-	MessageID string `json:"message_id"`
-	ChannelID string `json:"channel_id"`
+	MessageID string `json:"message_id" msgpack:"message_id"`
+	ChannelID string `json:"channel_id" msgpack:"channel_id"`
 }
 
 // MessageCreate is the data for a MessageCreate event.
@@ -223,7 +223,7 @@ type MessageCreate struct {
 type MessageUpdate struct {
 	*Message
 	// BeforeUpdate will be nil if the Message was not previously cached in the state cache.
-	BeforeUpdate *Message `json:"-"`
+	BeforeUpdate *Message `json:"-" msgpack:"-"`
 }
 
 // MessageDelete is the data for a MessageDelete event.
@@ -248,15 +248,15 @@ type MessageReactionRemoveAll struct {
 
 // Resumed is the data for a Resumed event.
 type Resumed struct {
-	Trace []string `json:"_trace"`
+	Trace []string `json:"_trace" msgpack:"_trace"`
 }
 
 // TypingStart is the data for a TypingStart event.
 type TypingStart struct {
-	UserID    string `json:"user_id"`
-	ChannelID string `json:"channel_id"`
-	GuildID   string `json:"guild_id,omitempty"`
-	Timestamp int    `json:"timestamp"`
+	UserID    string `json:"user_id" msgpack:"user_id"`
+	ChannelID string `json:"channel_id" msgpack:"channel_id"`
+	GuildID   string `json:"guild_id,omitempty" msgpack:"guild_id,omitempty"`
+	Timestamp int    `json:"timestamp" msgpack:"timestamp"`
 }
 
 // UserUpdate is the data for a UserUpdate event.
@@ -266,9 +266,9 @@ type UserUpdate struct {
 
 // VoiceServerUpdate is the data for a VoiceServerUpdate event.
 type VoiceServerUpdate struct {
-	Token    string `json:"token"`
-	GuildID  string `json:"guild_id"`
-	Endpoint string `json:"endpoint"`
+	Token    string `json:"token" msgpack:"token"`
+	GuildID  string `json:"guild_id" msgpack:"guild_id"`
+	Endpoint string `json:"endpoint" msgpack:"endpoint"`
 }
 
 // VoiceStateUpdate is the data for a VoiceStateUpdate event.
@@ -278,13 +278,13 @@ type VoiceStateUpdate struct {
 
 // MessageDeleteBulk is the data for a MessageDeleteBulk event
 type MessageDeleteBulk struct {
-	Messages  []string `json:"ids"`
-	ChannelID string   `json:"channel_id"`
-	GuildID   string   `json:"guild_id"`
+	Messages  []string `json:"ids" msgpack:"ids"`
+	ChannelID string   `json:"channel_id" msgpack:"channel_id"`
+	GuildID   string   `json:"guild_id" msgpack:"guild_id"`
 }
 
 // WebhooksUpdate is the data for a WebhooksUpdate event
 type WebhooksUpdate struct {
-	GuildID   string `json:"guild_id"`
-	ChannelID string `json:"channel_id"`
+	GuildID   string `json:"guild_id" msgpack:"guild_id"`
+	ChannelID string `json:"channel_id" msgpack:"channel_id"`
 }

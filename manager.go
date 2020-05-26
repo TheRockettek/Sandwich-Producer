@@ -60,29 +60,29 @@ type managerConfiguration struct {
 	stanClient   stan.Conn
 
 	// Manual sharding
-	Autoshard  bool `json:"autoshard"`
-	ShardCount int  `json:"shard_count"`
+	Autoshard  bool `json:"autoshard" msgpack:"autoshard"`
+	ShardCount int  `json:"shard_count" msgpack:"shard_count"`
 
 	// Authentication for redis client
-	RedisAddress  string `json:"redis_address"`
-	RedisPassword string `json:"redis_password"`
-	RedisDatabase int    `json:"redis_database"`
+	RedisAddress  string `json:"redis_address" msgpack:"redis_address"`
+	RedisPassword string `json:"redis_password" msgpack:"redis_password"`
+	RedisDatabase int    `json:"redis_database" msgpack:"redis_database"`
 
 	// RedisPrefix represents what keys will be prepended with when keys are constructed
-	RedisPrefix string `json:"redis_prefix"`
+	RedisPrefix string `json:"redis_prefix" msgpack:"redis_prefix"`
 
 	// Configuration for NATS
-	NatsAddress string `json:"nats_address"`
-	NatsChannel string `json:"nats_channel"`
-	ClusterID   string `json:"nats_cluster"`
-	ClientID    string `json:"nats_client"`
+	NatsAddress string `json:"nats_address" msgpack:"nats_address"`
+	NatsChannel string `json:"nats_channel" msgpack:"nats_channel"`
+	ClusterID   string `json:"nats_cluster" msgpack:"nats_cluster"`
+	ClientID    string `json:"nats_client" msgpack:"nats_client"`
 
 	// IgnoredEvents shows events that will be completely ignored if they are dispatched
-	IgnoredEvents []string `json:"ignored"`
+	IgnoredEvents []string `json:"ignored" msgpack:"ignored"`
 
 	// EventBlacklist shows events that will have its information cached but will not be
 	// relayed to consumers.
-	ProducerBlacklist []string `json:"blacklist"`
+	ProducerBlacklist []string `json:"blacklist" msgpack:"blacklist"`
 }
 
 // NewManager creates all the shards and shenanigans

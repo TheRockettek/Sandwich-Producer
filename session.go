@@ -231,9 +231,9 @@ func (s *Session) Open() error {
 		p := Resume{
 			Op: 6,
 			Data: struct {
-				Token     string `json:"token"`
-				SessionID string `json:"session_id"`
-				Sequence  int64  `json:"seq"`
+				Token     string `json:"token" msgpack:"token"`
+				SessionID string `json:"session_id" msgpack:"session_id"`
+				Sequence  int64  `json:"seq" msgpack:"seq"`
 			}{
 				Token:     s.Token,
 				SessionID: s.sessionID,
