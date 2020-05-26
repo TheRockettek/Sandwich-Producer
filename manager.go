@@ -59,6 +59,9 @@ type managerConfiguration struct {
 	natsClient   *nats.Conn
 	stanClient   stan.Conn
 
+	// States
+	StateSettings stateSettings `json:"state" msgpack:"state"`
+
 	// Manual sharding
 	Autoshard  bool `json:"autoshard" msgpack:"autoshard"`
 	ShardCount int  `json:"shard_count" msgpack:"shard_count"`
@@ -83,6 +86,12 @@ type managerConfiguration struct {
 	// EventBlacklist shows events that will have its information cached but will not be
 	// relayed to consumers.
 	ProducerBlacklist []string `json:"blacklist" msgpack:"blacklist"`
+}
+
+// StateSettings represents extra configurations for specific caching
+type stateSettings struct {
+	EnableMembers bool `json:"enable_members" msgpack:"enable_members"`
+	VoiceSupport  bool `json:"voice_support" msgpack:"voice_support"` // Not implemented
 }
 
 // NewManager creates all the shards and shenanigans

@@ -331,7 +331,7 @@ func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 	// Get the guild object to add the channel ID
 	guild, err := m.getGuild(guildChannel.GuildID)
 	if err != nil {
-		m.log.Error().Err(err).Msgf("GUILD_CHANNEL_CREATE referenced unknown guild %s", guildChannel.GuildID)
+		m.log.Error().Err(err).Msgf("CHANNEL_CREATE referenced unknown guild %s", guildChannel.GuildID)
 	}
 
 	// Marshal the channel then add it to redis if successful
@@ -346,7 +346,7 @@ func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 
 	ok = true
 	se = StreamEvent{
-		Type: "GUILD_CHANNEL_CREATE",
+		Type: "CHANNEL_CREATE",
 		Data: &guildChannel,
 	}
 
@@ -364,7 +364,7 @@ func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 
 	channel, err := m.getChannel(updatedChannel.ID)
 	if err != nil {
-		m.log.Error().Err(err).Msgf("GUILD_CHANNEL_UPDATE referenced unknown channel %s in guild %s", updatedChannel.ID, updatedChannel.GuildID)
+		m.log.Error().Err(err).Msgf("CHANNEL_UPDATE referenced unknown channel %s in guild %s", updatedChannel.ID, updatedChannel.GuildID)
 	}
 
 	if err = updatedChannel.Save(m); err != nil {
@@ -374,7 +374,7 @@ func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 	if !reflect.DeepEqual(&channel, &updatedChannel) {
 		ok = true
 		se = StreamEvent{
-			Type: "GUILD_CHANNEL_UPDATE",
+			Type: "CHANNEL_UPDATE",
 			Data: struct {
 				Before *Channel `msgpack:"before"`
 				After  *Channel `msgpack:"after"`
@@ -384,7 +384,7 @@ func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 			},
 		}
 	} else {
-		m.log.Info().Msg("not creating GUILD_CHANNEL_UPDATE as the before and after seem equal")
+		m.log.Info().Msg("not creating CHANNEL_UPDATE as the before and after seem equal")
 	}
 
 	return
@@ -401,7 +401,7 @@ func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 
 	guild, err := m.getGuild(guildChannel.GuildID)
 	if err != nil {
-		m.log.Error().Err(err).Msgf("GUILD_CHANNEL_UPDATE referenced unknown guild %s", guildChannel.GuildID)
+		m.log.Error().Err(err).Msgf("CHANNEL_UPDATE referenced unknown guild %s", guildChannel.GuildID)
 	}
 
 	if err = guildChannel.Delete(m); err != nil {
@@ -423,8 +423,37 @@ func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 
 	ok = true
 	se = StreamEvent{
-		Type: "GUILD_CHANNEL_DELETE",
+		Type: "CHANNEL_DELETE",
 		Data: &guildChannel,
+	}
+
+	return
+}
+
+func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	pinsPayload := ChannelPinsUpdate{}
+	if err = json.Unmarshal(e.RawData, &pinsPayload); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal guild channel update payload")
+		return
+	}
+
+	channel, err := m.getChannel(pinsPayload.ChannelID)
+	if err != nil {
+		m.log.Error().Err(err).Msgf("CHANNEL_PINS_UPDATE referenced unknown channel %s in guild %s", pinsPayload.ChannelID, pinsPayload.GuildID)
+	}
+
+	channel.LastPinTimestamp = Timestamp(pinsPayload.LastPinTimestamp)
+
+	if err = channel.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to update guild")
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: "CHANNEL_PINS_UPDATE",
+		Data: &pinsPayload,
 	}
 
 	return
@@ -450,7 +479,7 @@ func init() {
 	addMarshaler("CHANNEL_CREATE", guildChannelCreateMarshaler)
 	addMarshaler("CHANNEL_UPDATE", guildChannelUpdateMarshaler)
 	addMarshaler("CHANNEL_DELETE", guildChannelDeleteMarshaler)
-	// CHANNEL_PINS_UPDATE
+	addMarshaler("CHANNEL_PINS_UPDATE", guildChannelPinsUpdateMarshaler)
 
 	// GUILD_MEMBER_ADD
 	// GUILD_MEMBER_REMOVE
