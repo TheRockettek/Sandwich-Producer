@@ -59,8 +59,8 @@ type managerConfiguration struct {
 	natsClient   *nats.Conn
 	stanClient   stan.Conn
 
-	// States
-	StateSettings stateSettings `json:"state" msgpack:"state"`
+	// // States
+	// StateSettings stateSettings `json:"state" msgpack:"state"`
 
 	// Manual sharding
 	Autoshard  bool `json:"autoshard" msgpack:"autoshard"`
