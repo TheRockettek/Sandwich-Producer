@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"compress/zlib"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
