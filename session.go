@@ -143,6 +143,7 @@ func NewSession(token string, shardid int, shardcount int, eventChannel chan Eve
 		Token:                  token,
 		eventChannel:           eventChannel,
 		gateway:                gateway,
+		log:                    log,
 	}
 
 	return
@@ -338,11 +339,15 @@ func (s *Session) heartbeat(wsConn *websocket.Conn, listening <-chan interface{}
 		last := s.LastHeartbeatAck
 		s.RUnlock()
 		sequence := atomic.LoadInt64(s.sequence)
-		s.log.Debug().Int64("seq", *s.sequence).Msg("Sending gateway websocket heartbeat")
+		s.log.Debug().Int64("seq", sequence).Msg("Sending gateway websocket heartbeat")
 		s.wsMutex.Lock()
 		s.LastHeartbeatSent = time.Now().UTC()
 		err = wsConn.WriteJSON(Heartbeat{1, sequence})
 		s.wsMutex.Unlock()
+
+		if time.Now().UTC().Sub(last) > (heartbeatIntervalMsec * time.Millisecond) {
+			s.log.Error().Dur("expected", heartbeatIntervalMsec*time.Millisecond).Dur("since", time.Now().UTC().Sub(last)).Msgf("Shard %d not received heartbeat ack in a while!", s.ShardID)
+		}
 
 		if err != nil || time.Now().UTC().Sub(last) > (heartbeatIntervalMsec*FailedHeartbeatAcks) {
 			if err != nil {
@@ -448,7 +453,6 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 		s.LastHeartbeatAck = time.Now().UTC()
 		s.Unlock()
 
-		s.log.Debug().Msg("got heartbeat ACK")
 		return e, nil
 	}
 
@@ -569,10 +573,9 @@ func (s *Session) CloseWithStatus(statusCode int) (err error) {
 	s.log.Debug().Msg("emit disconnect event")
 	s.dispatch("SHARD_DISCONNECT", &Event{
 		Type: "SHARD_DISCONNECT",
-		Data: struct {
-			ShardID int `msgpack:"shard_id"`
-		}{
-			ShardID: s.ShardID,
+		Data: ShardDisconnectOp{
+			ShardID:    s.ShardID,
+			StatusCode: statusCode,
 		},
 	})
 
@@ -631,4 +634,29 @@ func (s *Session) dispatch(et string, e *Event) error {
 	var err error
 	s.eventChannel <- *e
 	return err
+}
+
+// RequestGuildMembers requests guild members from the gateway
+// The gateway responds with GuildMembersChunk events
+// guildID  : The ID of the guild to request members of
+// query    : String that username starts with, leave empty to return all members
+// limit    : Max number of items to return, or 0 to request all members matched
+func (s *Session) RequestGuildMembers(guildID, query string, limit int) (err error) {
+	s.RLock()
+	defer s.RUnlock()
+	if s.wsConn == nil {
+		return ErrWSNotFound
+	}
+
+	data := RequestGuildMembersData{
+		GuildID: guildID,
+		Query:   query,
+		Limit:   limit,
+	}
+
+	s.wsMutex.Lock()
+	err = s.wsConn.WriteJSON(RequestGuildMembersOp{8, data})
+	s.wsMutex.Unlock()
+
+	return
 }

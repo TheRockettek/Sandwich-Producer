@@ -133,6 +133,26 @@ type MfaLevel int
 // PremiumTier type definition
 type PremiumTier int
 
+// ShardDisconnectOp is the payload for SESSION_DISCONNECT
+type ShardDisconnectOp struct {
+	ShardID    int `msgpack:"shard_id"`
+	StatusCode int `msgpack:"status"`
+}
+
+// RequestGuildMembersData contains the data that is sent during a
+// REQUEST_GUILD_MEMBERS payload.
+type RequestGuildMembersData struct {
+	GuildID string `json:"guild_id"`
+	Query   string `json:"query"`
+	Limit   int    `json:"limit"`
+}
+
+// RequestGuildMembersOp contains the structure of the payload
+type RequestGuildMembersOp struct {
+	Op   int                     `json:"op"`
+	Data RequestGuildMembersData `json:"d"`
+}
+
 // A TooManyRequests struct holds information received from Discord
 // when receiving a HTTP 429 response.
 type TooManyRequests struct {
@@ -212,6 +232,37 @@ type User struct {
 
 	// Whether the user is a bot.
 	Bot bool `json:"bot" msgpack:"bot"`
+
+	// List of guild ids of mutual guilds
+	Mutual LockSet `json:"-" msgpack:"mutual"`
+}
+
+// Save saves the Member into redis
+func (u *User) Save(m *Manager) (err error) {
+	ma, err := msgpack.Marshal(u)
+	if err != nil {
+		return
+	}
+
+	err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
+		u.ID,
+		ma,
+	).Err()
+
+	return
+}
+
+// Delete deletes the Member from redis
+func (u *User) Delete(m *Manager) (err error) {
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
+		u.ID,
+	).Err()
+
+	return
 }
 
 // A Member stores user information for Guild members. A guild
@@ -233,13 +284,104 @@ type Member struct {
 	Mute bool `json:"mute" msgpack:"mute"`
 
 	// The underlying user on which the member is based.
-	User *User `json:"user" msgpack:"user"`
+	User *User `json:"user" msgpack:"-"`
+
+	// Referenced user id
+	ID string `json:"-" msgpack:"user_id"`
 
 	// A list of IDs of the roles which are possessed by the member.
 	Roles []string `json:"roles" msgpack:"roles"`
 
 	// When the user used their Nitro boost on the server
 	PremiumSince Timestamp `json:"premium_since" msgpack:"premium_since"`
+}
+
+// From creates a member object from bytes that is expected to be from
+// redis
+func (me *Member) From(data []byte, m *Manager) (err error) {
+
+	err = msgpack.Unmarshal(data, &me)
+	if err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal guild")
+		return
+	}
+
+	u, err := m.getUser(me.ID)
+	if err != nil {
+		m.log.Error().Err(err).Msg("failed to retrieve user from redis")
+	}
+	me.User = &u
+	if _, change := u.Mutual.Add(me.GuildID); change {
+		if err = u.Save(m); err != nil {
+			m.log.Error().Err(err).Msg("failed to update user from redis")
+		}
+	}
+
+	return
+}
+
+// Marshaled saves the marshaled data
+func (me *Member) Marshaled(m *Manager) (ma []byte, err error) {
+	me.ID = me.User.ID
+
+	if res, err := m.Configuration.redisClient.HExists(
+		ctx,
+		fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
+		me.ID,
+	).Result(); err == nil {
+		if res {
+			u, _ := m.getUser(me.ID)
+			me.User = &u
+		}
+	}
+
+	if _, change := me.User.Mutual.Add(me.GuildID); change {
+		if err = me.User.Save(m); err != nil {
+			m.log.Error().Err(err).Msg("failed to update user from redis")
+		}
+	}
+
+	ma, err = msgpack.Marshal(me)
+
+	return
+}
+
+// Save saves the Member into redis
+func (me *Member) Save(m *Manager) (err error) {
+	ma, err := me.Marshaled(m)
+	if err != nil {
+		m.log.Error().Err(err).Msg("failed to marshal user")
+	}
+
+	err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, me.GuildID),
+		me.User.ID,
+		ma,
+	).Err()
+
+	return
+}
+
+// Delete deletes the Member from redis
+func (me *Member) Delete(m *Manager) (err error) {
+	err = m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, me.GuildID),
+		me.User.ID,
+	).Err()
+
+	u, err := m.getUser(me.ID)
+	if err != nil {
+		m.log.Error().Err(err).Msg("failed to retrieve user from redis")
+	}
+	if _, change := u.Mutual.Remove(me.GuildID); change {
+		if err = u.Save(m); err != nil {
+			m.log.Error().Err(err).Msg("failed to update user from redis")
+		}
+	}
+
+	return
 }
 
 // UnavailableGuild is sent when you receive a GUILD_DELETE event. This contains
@@ -328,7 +470,7 @@ type Guild struct {
 	// A list of the members in the guild.
 	// This field is only present in GUILD_CREATE events and websocket
 	// update events, and thus is only present in state-cached guilds.
-	Members []*Member `json:"-" msgpack:"-"`
+	Members []*Member `json:"members" msgpack:"-"`
 
 	// A list of channels in the guild.
 	// This field is only present in GUILD_CREATE events and websocket

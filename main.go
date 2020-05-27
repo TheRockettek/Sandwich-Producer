@@ -38,9 +38,6 @@ func main() {
 			ClusterID:     "cluster",
 			RedisPrefix:   "welcomer",
 			IgnoredEvents: []string{"PRESENCE_UPDATE", "TYPING_START"},
-			StateSettings: stateSettings{
-				EnableMembers: false,
-			},
 			redisOptions: &redis.Options{
 				Addr:     "localhost:6379",
 				Password: "",

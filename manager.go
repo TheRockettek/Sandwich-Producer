@@ -33,7 +33,7 @@ type Manager struct {
 	produceChannel chan StreamEvent
 
 	// Sessions contains a list of all the sessions present
-	Sessions []*Session
+	Sessions map[int]*Session
 
 	// The http client used for REST requests
 	Client *http.Client
@@ -86,12 +86,6 @@ type managerConfiguration struct {
 	// EventBlacklist shows events that will have its information cached but will not be
 	// relayed to consumers.
 	ProducerBlacklist []string `json:"blacklist" msgpack:"blacklist"`
-}
-
-// StateSettings represents extra configurations for specific caching
-type stateSettings struct {
-	EnableMembers bool `json:"enable_members" msgpack:"enable_members"`
-	VoiceSupport  bool `json:"voice_support" msgpack:"voice_support"` // Not implemented
 }
 
 // NewManager creates all the shards and shenanigans
@@ -163,7 +157,7 @@ func (m *Manager) Open() (err error) {
 	}
 
 	m.log.Info().Int("shards", m.ShardCount).Bool("autosharded", m.Configuration.Autoshard).Msg("creating sessions")
-	m.Sessions = make([]*Session, m.ShardCount)
+	m.Sessions = make(map[int]*Session)
 
 	for shardID := 0; shardID < m.ShardCount; shardID++ {
 		m.Sessions[shardID] = NewSession(m.Token, shardID, m.ShardCount, m.eventChannel, m.log, m.GatewayResponse.URL)
@@ -173,7 +167,8 @@ func (m *Manager) Open() (err error) {
 	go m.ForwardEvents()
 	go m.ForwardProduce()
 
-	for shardID, session := range m.Sessions {
+	for shardID := 0; shardID < m.ShardCount; shardID++ {
+		session := m.Sessions[shardID]
 		m.log.Info().Int("shard", shardID).Msg("starting session")
 		err = session.Open()
 		if err != nil {
@@ -344,6 +339,42 @@ func (m *Manager) getChannel(id string) (c Channel, err error) {
 	c = Channel{}
 	if err = msgpack.Unmarshal([]byte(channelData), &c); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal channel from redis")
+	}
+
+	return
+}
+
+func (m *Manager) getUser(userID string) (u User, err error) {
+	userData, err := m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
+		userID,
+	).Result()
+	if err != nil {
+		m.log.Error().Err(err).Msg("getUser failed to retrieve user")
+	}
+
+	u = User{}
+	if err = msgpack.Unmarshal([]byte(userData), &u); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal user from redis")
+	}
+
+	return
+}
+
+func (m *Manager) getMember(guildID string, userID string) (me Member, err error) {
+	memberData, err := m.Configuration.redisClient.HGet(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guildID),
+		userID,
+	).Result()
+	if err != nil {
+		m.log.Error().Err(err).Msg("getMember failed to retrieve member")
+	}
+
+	err = me.From([]byte(memberData), m)
+	if err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal member from redis")
 	}
 
 	return

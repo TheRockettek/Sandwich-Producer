@@ -31,9 +31,7 @@ func shardReadyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 
 func shardDisconnectMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	ok, se.Data = true, e.Data
-	m.log.Info().Msgf("Shard %d has disconnected", e.Data.(struct {
-		ShardID int `msgpack:"shard_id"`
-	}).ShardID)
+	m.log.Info().Msgf("Shard %d has disconnected with code %d", se.Data.(ShardDisconnectOp).ShardID, se.Data.(ShardDisconnectOp).StatusCode)
 	return
 }
 
@@ -92,15 +90,42 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		// be available again incase we did not get the unavailable payload. If neither,
 		// this just means it was initial GUILD_CREATE event when the bot is connecting
 		// and we can just ignore it.
-		if un || ic {
+
+		// If was unavailable and is in cache, it was down so fire guild available
+		if un && ic {
 			ok = true
 			se = StreamEvent{
 				Type: "GUILD_AVAILABLE",
 				Data: &guild,
 			}
-		} else {
-			ok = false
 		}
+		// If not unavailable and not in cache, it is initial guild create
+		if !(un && ic) {
+			// m.log.Debug().Msg("saving guild members to redis")
+			// if m.Configuration.StateSettings.EnableMembers {
+			// 	marshals := make(map[string]interface{})
+			// 	for _, me := range guild.Members {
+			// 		me.GuildID = guild.ID
+			// 		ma, _ := me.Marshaled(m)
+			// 		marshals[me.ID] = ma
+			// 	}
+
+			// 	err := m.Configuration.redisClient.HSet(
+			// 		ctx,
+			// 		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guild.ID),
+			// 		marshals,
+			// 	).Err()
+			// 	if err != nil {
+			// 		m.log.Error().Err(err).Msg("Failed to add members to state")
+			// 	} else {
+			// 		m.log.Debug().Msgf("Added %d members to state", len(guild.Members))
+			// 	}
+			// }
+		}
+
+		// If it was in unavailables and either wasnt marked unavailable or was in cache,
+		// it is probrably just a shard that reconnected so dont bother
+		ok = false
 	} else {
 		// We will only fire events if they have invited bot
 		ok = true
@@ -481,9 +506,14 @@ func init() {
 	addMarshaler("CHANNEL_DELETE", guildChannelDeleteMarshaler)
 	addMarshaler("CHANNEL_PINS_UPDATE", guildChannelPinsUpdateMarshaler)
 
+	// addMarshaler("GUILD_MEMBER_ADD", guildMemberAddMarshaler)
+	// addMarshaler("GUILD_MEMBER_REMOVE", guildMemberRemoveMarshaler)
+	// addMarshaler("GUILD_MEMBER_UPDATE", guildMemberUpdateMarshaler)
+
 	// GUILD_MEMBER_ADD
 	// GUILD_MEMBER_REMOVE
 	// GUILD_MEMBER_UPDATE
+	// GUILD_MEMBERS_CHUNK
 
 	// GUILD_BAN_ADD
 	// GUILD_BAN_REMOVE
@@ -500,6 +530,7 @@ func init() {
 	// VOICE_STATE_UPDATE
 
 	// PRESENCE_UPDATE
+	// USER_UPDATE
 
 	// MESSAGE_CREATE
 	// MESSAGE_UPDATE
