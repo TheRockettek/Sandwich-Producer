@@ -298,9 +298,8 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 			sameConnection := s.wsConn == wsConn
 			s.RUnlock()
 
-			s.log.Error().Err(err).Str("gateway", s.gateway).Msg("Error reading from gateway websocket")
-
 			if sameConnection {
+				s.log.Error().Err(err).Str("gateway", s.gateway).Msg("Error reading from gateway websocket")
 				// There has been an error reading, close the websocket so that
 				// OnDisconnect event is emitted.
 				err := s.Close()

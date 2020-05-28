@@ -155,11 +155,6 @@ func (mg *MarshalGuild) Create(data jsoniter.RawMessage) (err error) {
 func (mg *MarshalGuild) From(data []byte) (err error) {
 
 	err = msgpack.Unmarshal(data, &mg)
-	if err != nil {
-		zlog.Error().Err(err).Msg("failed to unmarshal guild")
-		return
-	}
-
 	return
 }
 
@@ -215,70 +210,54 @@ func (mg *MarshalGuild) Save(m *Manager) (err error) {
 	for _, r := range mg.RoleValues {
 		if ma, err = msgpack.Marshal(r); err == nil {
 			guildRoles[r.ID] = ma
-		} else {
-			m.log.Error().Err(err).Msg("failed to marshal role")
 		}
 	}
 
 	if len(guildRoles) > 0 {
-		if err = m.Configuration.redisClient.HSet(
+		err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, mg.ID),
 			guildRoles,
-		).Err(); err != nil {
-			m.log.Error().Err(err).Msg("failed to set roles")
-		}
+		).Err()
 	}
 
 	guildChannels := make(map[string]interface{})
 	for _, c := range mg.ChannelValues {
 		if ma, err = msgpack.Marshal(c); err == nil {
 			guildChannels[c.ID] = ma
-		} else {
-			m.log.Error().Err(err).Msg("failed to marshal channel")
 		}
 	}
 
 	if len(guildChannels) > 0 {
-		if err = m.Configuration.redisClient.HSet(
+		err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
 			guildChannels,
-		).Err(); err != nil {
-			m.log.Error().Err(err).Msg("failed to set channels")
-		}
+		).Err()
 	}
 
 	guildEmojis := make(map[string]interface{})
 	for _, e := range mg.EmojiValues {
 		if ma, err = msgpack.Marshal(e); err == nil {
 			guildEmojis[e.ID] = ma
-		} else {
-			m.log.Error().Err(err).Msg("failed to marshal emoji")
 		}
 	}
 
 	if len(guildEmojis) > 0 {
-		if err = m.Configuration.redisClient.HSet(
+		err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
 			guildEmojis,
-		).Err(); err != nil {
-			m.log.Error().Err(err).Msg("failed to set emojis")
-		}
+		).Err()
 	}
 
 	if ma, err = msgpack.Marshal(mg); err == nil {
-		if err = m.Configuration.redisClient.HSet(
+		err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
 			mg.ID,
 			ma,
-		).Err(); err != nil {
-			m.log.Error().Err(err).Msg("failed to set guild")
-		}
-	} else {
-		m.log.Error().Err(err).Msg("failed to marshal guild")
+		).Err()
 	}
 
 	return

@@ -239,8 +239,6 @@ func (m *Manager) OnEvent(e Event) (ok bool, se StreamEvent) {
 		ok, data = ma(m, e)
 		if ok {
 			se = data
-		} else {
-			m.log.Debug().Str("type", e.Type).Msg("marshaler reported not ok")
 		}
 	} else {
 		m.log.Warn().Str("type", e.Type).Msg("no available marshaler")
@@ -262,7 +260,6 @@ func (m *Manager) ForwardEvents() {
 	var se StreamEvent
 	for e := range m.eventChannel {
 		if belongsToList(m.Configuration.IgnoredEvents, e.Type) {
-			m.log.Debug().Str("type", e.Type).Msg("event blacklisted")
 			continue
 		}
 
@@ -270,8 +267,6 @@ func (m *Manager) ForwardEvents() {
 
 		if ok && !belongsToList(m.Configuration.ProducerBlacklist, e.Type) {
 			m.produceChannel <- se
-		} else {
-			m.log.Debug().Str("type", e.Type).Msg("ignoring event")
 		}
 	}
 }
@@ -314,13 +309,11 @@ func (m *Manager) getGuild(id string) (g MarshalGuild, err error) {
 		id,
 	).Result()
 	if err != nil {
-		m.log.Error().Err(err).Msg("getGuild failed to retrieve guild")
 		return
 	}
 
 	g = MarshalGuild{}
 	if err = g.From([]byte(guildData)); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild from redis")
 		return
 	}
 
@@ -334,13 +327,11 @@ func (m *Manager) getChannel(id string) (c Channel, err error) {
 		id,
 	).Result()
 	if err != nil {
-		m.log.Error().Err(err).Msg("getChannel failed to retrieve channel")
 		return
 	}
 
 	c = Channel{}
 	if err = msgpack.Unmarshal([]byte(channelData), &c); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal channel from redis")
 	}
 
 	return
@@ -353,12 +344,12 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 		userID,
 	).Result()
 	if err != nil {
-		m.log.Error().Err(err).Msg("getUser failed to retrieve user")
+		return
 	}
 
 	u = User{}
 	if err = msgpack.Unmarshal([]byte(userData), &u); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal user from redis")
+		return
 	}
 
 	return
@@ -371,12 +362,12 @@ func (m *Manager) getMember(guildID string, userID string) (me Member, err error
 		userID,
 	).Result()
 	if err != nil {
-		m.log.Error().Err(err).Msg("getMember failed to retrieve member")
+		return
 	}
 
 	err = me.From([]byte(memberData), m)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal member from redis")
+		return
 	}
 
 	return
@@ -389,12 +380,12 @@ func (m *Manager) getRole(guildID string, roleID string) (r Role, err error) {
 		roleID,
 	).Result()
 	if err != nil {
-		m.log.Error().Err(err).Msg("getRole failed to retrieve role")
+		return
 	}
 
 	r = Role{}
 	if err = msgpack.Unmarshal([]byte(roleData), &r); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal role from redis")
+		return
 	}
 
 	return
@@ -407,12 +398,12 @@ func (m *Manager) getEmoji(id string) (e Emoji, err error) {
 		id,
 	).Result()
 	if err != nil {
-		m.log.Error().Err(err).Msg("getEmoji failed to retrieve emoji")
+		return
 	}
 
 	e = Emoji{}
 	if err = msgpack.Unmarshal([]byte(emojiData), &e); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild")
+		return
 	}
 
 	return
