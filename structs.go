@@ -529,21 +529,21 @@ type Channel struct {
 	Name string `json:"name" msgpack:"name"`
 
 	// The topic of the channel.
-	Topic string `json:"topic" msgpack:"topic"`
+	Topic string `json:"topic" msgpack:"topic,omitempty"`
 
 	// The type of the channel.
 	Type ChannelType `json:"type" msgpack:"type"`
 
 	// The ID of the last message sent in the channel. This is not
 	// guaranteed to be an ID of a valid message.
-	LastMessageID string `json:"last_message_id" msgpack:"last_message_id"`
+	LastMessageID string `json:"last_message_id" msgpack:"last_message_id,omitempty"`
 
 	// The timestamp of the last pinned message in the channel.
 	// Empty if the channel has no pinned messages.
-	LastPinTimestamp Timestamp `json:"last_pin_timestamp" msgpack:"last_pin_timestamp"`
+	LastPinTimestamp Timestamp `json:"last_pin_timestamp" msgpack:"last_pin_timestamp,omitempty"`
 
 	// Whether the channel is marked as NSFW.
-	NSFW bool `json:"nsfw" msgpack:"nsfw"`
+	NSFW bool `json:"nsfw" msgpack:"nsfw,omitempty"`
 
 	// Icon of the group DM channel.
 	Icon string `json:"icon" msgpack:"icon"`
@@ -552,23 +552,23 @@ type Channel struct {
 	Position int `json:"position" msgpack:"position"`
 
 	// The bitrate of the channel, if it is a voice channel.
-	Bitrate int `json:"bitrate" msgpack:"bitrate"`
+	Bitrate int `json:"bitrate" msgpack:"bitrate,omitempty"`
 
 	// The recipients of the channel. This is only populated in DM channels.
-	Recipients []*User `json:"recipients" msgpack:"recipients"`
+	Recipients []*User `json:"recipients" msgpack:"recipients,omitempty"`
 
 	// A list of permission overwrites present for the channel.
-	PermissionOverwrites []*PermissionOverwrite `json:"permission_overwrites" msgpack:"permission_overwrites"`
+	PermissionOverwrites []*PermissionOverwrite `json:"permission_overwrites" msgpack:"permission_overwrites,omitempty"`
 
 	// The user limit of the voice channel.
-	UserLimit int `json:"user_limit" msgpack:"user_limit"`
+	UserLimit int `json:"user_limit" msgpack:"user_limit,omitempty"`
 
 	// The ID of the parent channel, if the channel is under a category
-	ParentID string `json:"parent_id" msgpack:"parent_id"`
+	ParentID string `json:"parent_id" msgpack:"parent_id,omitempty"`
 
 	// Amount of seconds a user has to wait before sending another message (0-21600)
 	// bots, as well as users with the permission manage_messages or manage_channel, are unaffected
-	RateLimitPerUser int `json:"rate_limit_per_user" msgpack:"rate_limit_per_user"`
+	RateLimitPerUser int `json:"rate_limit_per_user" msgpack:"rate_limit_per_user,omitempty"`
 }
 
 // Save saves the Channel into redis

@@ -111,7 +111,7 @@ type Session struct {
 	wsMutex sync.Mutex
 
 	// logging interface
-	log zerolog.Logger
+	log *zerolog.Logger
 
 	// map of guilds that are unavailable to differenticate joins and creations.
 	// the bool dictates if the guild was already in cache to know if the guild
@@ -124,7 +124,7 @@ type Session struct {
 }
 
 // NewSession creates a new session from a token, shardid and shardcount
-func NewSession(token string, shardid int, shardcount int, eventChannel chan Event, log zerolog.Logger, gateway string) (s *Session) {
+func NewSession(token string, shardid int, shardcount int, eventChannel chan Event, log *zerolog.Logger, gateway string) (s *Session) {
 	if !strings.HasPrefix(token, "Bot ") {
 		token = "Bot " + token
 	}
@@ -280,7 +280,7 @@ func (s *Session) Open() error {
 	s.listening = make(chan interface{})
 
 	// Start sending heartbeats and reading messages from Discord.
-	go s.heartbeat(s.wsConn, s.listening, h.HeartbeatInterval)
+	go s.heartbeat(s.listening, h.HeartbeatInterval)
 	go s.listen(s.wsConn, s.listening)
 	return nil
 }
@@ -298,8 +298,9 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 			sameConnection := s.wsConn == wsConn
 			s.RUnlock()
 
+			s.log.Error().Err(err).Str("gateway", s.gateway).Msg("Error reading from gateway websocket")
+
 			if sameConnection {
-				s.log.Warn().Err(err).Str("gateway", s.gateway).Msg("Error reading from gateway websocket")
 				// There has been an error reading, close the websocket so that
 				// OnDisconnect event is emitted.
 				err := s.Close()
@@ -324,8 +325,8 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 // heartbeat sends regular heartbeats to Discord so it knows the client
 // is still connected.  If you do not send these heartbeats Discord will
 // disconnect the websocket connection after a few seconds.
-func (s *Session) heartbeat(wsConn *websocket.Conn, listening <-chan interface{}, heartbeatIntervalMsec time.Duration) {
-	if listening == nil || wsConn == nil {
+func (s *Session) heartbeat(listening <-chan interface{}, heartbeatIntervalMsec time.Duration) {
+	if listening == nil || s.wsConn == nil {
 		return
 	}
 
@@ -334,18 +335,19 @@ func (s *Session) heartbeat(wsConn *websocket.Conn, listening <-chan interface{}
 	defer ticker.Stop()
 
 	for {
+		sequence := atomic.LoadInt64(s.sequence)
+		s.log.Debug().Int("shard", s.ShardID).Int64("seq", sequence).Msg("Sending gateway websocket heartbeat")
+		s.wsMutex.Lock()
+		s.LastHeartbeatSent = time.Now().UTC()
+		err = s.wsConn.WriteJSON(Heartbeat{1, sequence})
+		s.wsMutex.Unlock()
+
 		s.RLock()
 		last := s.LastHeartbeatAck
 		s.RUnlock()
-		sequence := atomic.LoadInt64(s.sequence)
-		s.log.Debug().Int64("seq", sequence).Msg("Sending gateway websocket heartbeat")
-		s.wsMutex.Lock()
-		s.LastHeartbeatSent = time.Now().UTC()
-		err = wsConn.WriteJSON(Heartbeat{1, sequence})
-		s.wsMutex.Unlock()
 
 		if time.Now().UTC().Sub(last) > (heartbeatIntervalMsec * time.Millisecond) {
-			s.log.Error().Dur("expected", heartbeatIntervalMsec*time.Millisecond).Dur("since", time.Now().UTC().Sub(last)).Msgf("Shard %d not received heartbeat ack in a while!", s.ShardID)
+			s.log.Trace().Time("since", last).Msgf("Shard %d not received heartbeat ack in a while!", s.ShardID)
 		}
 
 		if err != nil || time.Now().UTC().Sub(last) > (heartbeatIntervalMsec*FailedHeartbeatAcks) {
@@ -450,6 +452,7 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	if e.Operation == 11 {
 		s.Lock()
 		s.LastHeartbeatAck = time.Now().UTC()
+		s.log.Trace().Int("shard", s.ShardID).Time("time", s.LastHeartbeatAck).Msg("received heartbeat")
 		s.Unlock()
 
 		return e, nil

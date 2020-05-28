@@ -34,14 +34,15 @@ func main() {
 		*token,
 		"welcomer",
 		managerConfiguration{
-			NatsAddress:   "127.0.0.1:4000",
+			NatsAddress:   "127.0.0.1:4222",
 			NatsChannel:   "welcomer",
 			ClientID:      "welcomer",
 			ClusterID:     "cluster",
 			RedisPrefix:   "welcomer",
+			ShardCount:    1,
 			IgnoredEvents: []string{"PRESENCE_UPDATE", "TYPING_START"},
 			redisOptions: &redis.Options{
-				Addr:     "localhost:6379",
+				Addr:     "127.0.0.1:6379",
 				Password: "",
 				DB:       0,
 			},
@@ -55,7 +56,7 @@ func main() {
 	)
 	err = m.ClearCache()
 	if err != nil {
-		zlog.Panic().Err(err).Msg("Cold not clear cache")
+		zlog.Panic().Err(err).Msg("Could not clear cache")
 	}
 
 	err = m.Open()

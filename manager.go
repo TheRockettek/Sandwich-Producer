@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"time"
 
@@ -120,16 +121,18 @@ func (m *Manager) ClearCache() (err error) {
 		keys = append(keys, iter.Val())
 	}
 
+	deleted := int64(0)
 	if len(keys) > 0 {
-		if err = m.Configuration.redisClient.Del(
+		deleted, err = m.Configuration.redisClient.Del(
 			ctx,
 			keys...,
-		).Err(); err != nil {
+		).Result()
+		if err != nil {
 			m.log.Error().Err(err).Msg("failed to remove keys")
 		}
 	}
 
-	m.log.Info().Int("count", len(keys)).Msg("removed keys")
+	m.log.Info().Int64("deleted", deleted).Int("total", len(keys)).Msg("removed keys")
 	return
 }
 
@@ -145,7 +148,7 @@ func (m *Manager) Open() (err error) {
 	m.log.Info().Str("gateway", m.GatewayResponse.URL).Int("shards", m.GatewayResponse.Shards).Int("remaining", m.GatewayResponse.SessionLimit.Remaining).Send()
 
 	// We will use the recommended shard count if autoshard is enabled or the specified shard count is too small
-	if m.Configuration.Autoshard == true || m.Configuration.ShardCount < m.GatewayResponse.Shards {
+	if m.Configuration.Autoshard == true || m.Configuration.ShardCount < int(math.Ceil(float64(m.GatewayResponse.Shards)/2.5)) {
 		m.ShardCount = m.GatewayResponse.Shards
 	} else {
 		m.ShardCount = m.Configuration.ShardCount
@@ -159,7 +162,7 @@ func (m *Manager) Open() (err error) {
 	m.Sessions = make(map[int]*Session)
 
 	for shardID := 0; shardID < m.ShardCount; shardID++ {
-		m.Sessions[shardID] = NewSession(m.Token, shardID, m.ShardCount, m.eventChannel, m.log, m.GatewayResponse.URL)
+		m.Sessions[shardID] = NewSession(m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
 		m.Sessions[shardID].Presence = m.Presence
 	}
 

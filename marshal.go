@@ -209,7 +209,8 @@ func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 			},
 		}
 	} else {
-		m.log.Info().Msg("not creating GUILD_UPDATE as the before and after seem equal")
+		// m.log.Debug().Msg("not creating GUILD_UPDATE as the before and after seem equal")
+		ok = false
 	}
 
 	return
@@ -337,7 +338,8 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 			},
 		}
 	} else {
-		m.log.Info().Msg("not creating ROLE_UPDATE as the before and after seem equal")
+		// m.log.Debug().Msg("not creating ROLE_UPDATE as the before and after seem equal")
+		ok = false
 	}
 
 	return
@@ -408,7 +410,8 @@ func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 			},
 		}
 	} else {
-		m.log.Info().Msg("not creating CHANNEL_UPDATE as the before and after seem equal")
+		// m.log.Debug().Msg("not creating CHANNEL_UPDATE as the before and after seem equal")
+		ok = false
 	}
 
 	return
