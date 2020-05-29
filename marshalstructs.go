@@ -160,41 +160,51 @@ func (mg *MarshalGuild) From(data []byte) (err error) {
 
 // Delete removes the guild object from redis
 func (mg *MarshalGuild) Delete(m *Manager) (err error) {
-	if len(mg.Roles) > 0 {
-		if err = m.Configuration.redisClient.HDel(
-			ctx,
-			fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, mg.ID),
-			mg.Roles...,
-		).Err(); err != nil {
-			return
+	// Delete mutual guild for members
+	members, err := m.Configuration.redisClient.HKeys(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, mg.ID),
+	).Result()
+
+	// Get all members in the guild and remove their mutual guild
+	for _, member := range members {
+		u, err := m.getUser(member)
+		if err != nil {
+			m.log.Error().Err(err).Msg("failed to get user")
+		}
+
+		if change, _ := u.RemoveMutual(mg.ID); change {
+			err = u.SaveMutual(m)
 		}
 	}
 
-	if len(mg.Channels) > 0 {
-		if err = m.Configuration.redisClient.HDel(
-			ctx,
-			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
-			mg.Channels...,
-		).Err(); err != nil {
-			return
-		}
-	}
+	m.Configuration.redisClient.Del(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, mg.ID),
+	).Err()
 
-	if len(mg.Emojis) > 0 {
-		if err = m.Configuration.redisClient.HDel(
-			ctx,
-			fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
-			mg.Emojis...,
-		).Err(); err != nil {
-			return
-		}
-	}
+	m.Configuration.redisClient.Del(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:roles", m.Configuration.RedisPrefix, mg.ID),
+	).Err()
 
-	err = m.Configuration.redisClient.HDel(
+	m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
+		mg.Channels...,
+	).Err()
+
+	m.Configuration.redisClient.HDel(
+		ctx,
+		fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+		mg.Emojis...,
+	).Err()
+
+	m.Configuration.redisClient.HDel(
 		ctx,
 		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
 		mg.ID,
-	).Err()
+	)
 
 	return
 }

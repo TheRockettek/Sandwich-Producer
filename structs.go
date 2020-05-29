@@ -244,15 +244,15 @@ type MutualGuilds struct {
 }
 
 // AddMutual adds a mutual guild
-func (u *User) AddMutual(val string) (err error) {
-	u.Mutual.Guilds.Add(val)
+func (u *User) AddMutual(val string) (change bool, err error) {
+	_, change = u.Mutual.Guilds.Add(val)
 	u.Mutual.Removed.Remove(val)
 	return
 }
 
 // RemoveMutual removes a mutual guild
-func (u *User) RemoveMutual(val string) (err error) {
-	u.Mutual.Guilds.Remove(val)
+func (u *User) RemoveMutual(val string) (change bool, err error) {
+	_, change = u.Mutual.Guilds.Remove(val)
 	u.Mutual.Removed.Add(val)
 	return
 }

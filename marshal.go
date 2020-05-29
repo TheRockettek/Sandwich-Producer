@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"reflect"
-
-	"github.com/vmihailenco/msgpack"
 )
 
 var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent))
@@ -103,19 +101,13 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		// If not unavailable and not in cache, it is initial guild create
 		if !(un && ic) {
 			if m.Configuration.StateSettings.CacheMembers {
-				var err error
 				MemberMarshals := make(map[string]interface{})
-				UserMarshals := make(map[string]interface{})
 				for _, me := range guild.Members {
 					me.GuildID = guild.ID
-					ma, _ := me.Marshaled(true, m)
+					ma, err := me.Marshaled(true, m)
 					MemberMarshals[me.ID] = ma
-
-					ma, err = msgpack.Marshal(me.User)
-					if err == nil {
-						UserMarshals[me.ID] = ma
-					} else {
-						m.log.Warn().Err(err).Msg("failed to marshal user")
+					if err != nil {
+						m.log.Error().Err(err).Msg("failed to marshal member")
 					}
 				}
 
@@ -128,37 +120,8 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 					m.log.Error().Err(err).Msg("failed to add members to state")
 				}
 
-				err = m.Configuration.redisClient.HSet(
-					ctx,
-					fmt.Sprintf("%s:users", m.Configuration.RedisPrefix),
-					UserMarshals,
-				).Err()
-				if err != nil {
-					m.log.Error().Err(err).Msg("failed to add users to state")
-				}
-
 				m.log.Info().Msgf("Added %d members to state for guild %s", len(guild.Members), guild.ID)
 			}
-			// m.log.Debug().Msg("saving guild members to redis")
-			// if m.Configuration.StateSettings.EnableMembers {
-			// 	marshals := make(map[string]interface{})
-			// 	for _, me := range guild.Members {
-			// 		me.GuildID = guild.ID
-			// 		ma, _ := me.Marshaled(m)
-			// 		marshals[me.ID] = ma
-			// 	}
-
-			// err := m.Configuration.redisClient.HSet(
-			// 	ctx,
-			// 	fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guild.ID),
-			// 	marshals,
-			// ).Err()
-			// if err != nil {
-			// 	m.log.Error().Err(err).Msg("Failed to add members to state")
-			// } else {
-			// 	m.log.Debug().Msgf("Added %d members to state", len(guild.Members))
-			// }
-			// }
 		}
 
 		// If it was in unavailables and either wasnt marked unavailable or was in cache,
