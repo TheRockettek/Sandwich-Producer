@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,6 +31,10 @@ func main() {
 	token := flag.String("token", "", "token the bot will use to authenticate")
 	flag.Parse()
 
+	pass, err := ioutil.ReadFile("REDIS_PASSWORD")
+	redisPassword := string(pass)
+	zlog.Info().Msgf("using redis password: %s", redisPassword)
+
 	m := NewManager(
 		*token,
 		"welcomer",
@@ -46,7 +51,7 @@ func main() {
 			IgnoredEvents: []string{"PRESENCE_UPDATE", "TYPING_START"},
 			redisOptions: &redis.Options{
 				Addr:     "127.0.0.1:6379",
-				Password: "",
+				Password: redisPassword,
 				DB:       0,
 			},
 		},

@@ -19,3 +19,5 @@ data.json
 
 old/
 .vs/
+
+REDIS_PASSWORD
