@@ -260,16 +260,22 @@ func (u *MutualGuilds) Remove(val string) (err error) {
 
 // Save saves the User into redis
 func (u *MutualGuilds) Save(m *Manager) (err error) {
-	var vals []string
+	var vals []interface{}
 
-	vals = u.Guilds.Get()
+	vals = make([]interface{}, 0)
+	for _, v := range u.Guilds.Get() {
+		vals = append(vals, v)
+	}
 	err = m.Configuration.redisClient.SAdd(
 		ctx,
 		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
 		vals,
 	).Err()
 
-	vals = u.Removed.Get()
+	vals = make([]interface{}, 0)
+	for _, v := range u.Removed.Get() {
+		vals = append(vals, v)
+	}
 	err = m.Configuration.redisClient.SRem(
 		ctx,
 		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
