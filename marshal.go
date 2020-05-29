@@ -111,8 +111,8 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 					ma, _ := me.Marshaled(false, m)
 					MemberMarshals[me.ID] = ma
 
-					ma, err = msgpack.Marshal(me)
-					if err != nil {
+					ma, err = msgpack.Marshal(me.User)
+					if err == nil {
 						UserMarshals[me.ID] = ma
 					} else {
 						m.log.Warn().Err(err).Msg("failed to marshal user")
