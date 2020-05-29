@@ -111,6 +111,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 					ma, _ := me.Marshaled(true, m)
 					MemberMarshals[me.ID] = ma
 
+					me.User.Mutual.Key = me.User.ID
 					ma, err = msgpack.Marshal(me.User)
 					if err == nil {
 						UserMarshals[me.ID] = ma

@@ -264,6 +264,7 @@ func (u *MutualGuilds) Save(m *Manager) (err error) {
 
 	vals = u.Guilds.Get()
 	if len(vals) > 0 {
+		println("guilds", len(vals))
 		err = m.Configuration.redisClient.SAdd(
 			ctx,
 			fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
@@ -273,6 +274,7 @@ func (u *MutualGuilds) Save(m *Manager) (err error) {
 
 	vals = u.Removed.Get()
 	if len(vals) > 0 {
+		println("removed", len(vals))
 		err = m.Configuration.redisClient.SRem(
 			ctx,
 			fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
