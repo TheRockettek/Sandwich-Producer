@@ -108,7 +108,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 				UserMarshals := make(map[string]interface{})
 				for _, me := range guild.Members {
 					me.GuildID = guild.ID
-					ma, _ := me.Marshaled(false, m)
+					ma, _ := me.Marshaled(true, m)
 					MemberMarshals[me.ID] = ma
 
 					ma, err = msgpack.Marshal(me.User)
