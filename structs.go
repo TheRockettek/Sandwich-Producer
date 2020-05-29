@@ -234,33 +234,65 @@ type User struct {
 	Bot bool `json:"bot" msgpack:"bot"`
 
 	// List of guild ids of mutual guilds
-	Mutual LockSet `json:"-" msgpack:"mutual"`
+	Mutual MutualGuilds `json:"-" msgpack:"-"`
 }
 
-// Save saves the Member into redis
-func (u *User) Save(m *Manager) (err error) {
-	ma, err := msgpack.Marshal(u)
-	if err != nil {
-		return
-	}
+// MutualGuilds stores information about mutual guilds for a user
+type MutualGuilds struct {
+	Guilds  LockSet
+	Removed LockSet
+	Key     string
+}
 
-	err = m.Configuration.redisClient.HSet(
+// Add adds a mutual guild
+func (u *MutualGuilds) Add(val string) (err error) {
+	u.Guilds.Add(val)
+	u.Removed.Remove(val)
+	return
+}
+
+// Remove removes a mutual guild
+func (u *MutualGuilds) Remove(val string) (err error) {
+	u.Guilds.Remove(val)
+	u.Removed.Add(val)
+	return
+}
+
+// Save saves the User into redis
+func (u *MutualGuilds) Save(m *Manager) (err error) {
+	var vals []string
+
+	vals = u.Guilds.Get()
+	err = m.Configuration.redisClient.SAdd(
 		ctx,
-		fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
-		u.ID,
-		ma,
+		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
+		vals,
 	).Err()
+
+	vals = u.Removed.Get()
+	err = m.Configuration.redisClient.SRem(
+		ctx,
+		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
+		vals,
+	).Err()
+
+	u.Removed.Values = make([]string, 0)
 
 	return
 }
 
-// Delete deletes the Member from redis
-func (u *User) Delete(m *Manager) (err error) {
-	err = m.Configuration.redisClient.HDel(
+// Fetch fills the mutual guilds set
+func (u *MutualGuilds) Fetch(m *Manager) (err error) {
+	mutual, err := m.Configuration.redisClient.SMembers(
 		ctx,
-		fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
-		u.ID,
-	).Err()
+		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
+	).Result()
+
+	if err != nil {
+		for _, gid := range mutual {
+			u.Guilds.Add(gid)
+		}
+	}
 
 	return
 }
@@ -287,7 +319,7 @@ type Member struct {
 	User *User `json:"user" msgpack:"-"`
 
 	// Referenced user id
-	ID string `json:"-" msgpack:"user_id"`
+	ID string `json:"-" msgpack:"id"`
 
 	// A list of IDs of the roles which are possessed by the member.
 	Roles []string `json:"roles" msgpack:"roles"`
@@ -302,18 +334,32 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 
 	err = msgpack.Unmarshal(data, &me)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild")
 		return
 	}
 
-	u, err := m.getUser(me.ID)
+	// We add the user
+	err = me.FetchUser(false, m)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to retrieve user from redis")
+		m.log.Error().Err(err).Msgf("error fetching user %s", me.ID)
 	}
-	me.User = &u
-	if _, change := u.Mutual.Add(me.GuildID); change {
-		if err = u.Save(m); err != nil {
-			m.log.Error().Err(err).Msg("failed to update user from redis")
+
+	me.User.Mutual.Add(me.GuildID)
+	err = me.User.Mutual.Save(m)
+
+	return
+}
+
+// FetchUser will attempt to get the user object for the member.
+// If force is true, it will get the user reguardless if the user
+// in the member struct is already filled out.
+func (me *Member) FetchUser(force bool, m *Manager) (err error) {
+
+	if force || me.User == &(User{}) {
+		if me.ID != "" {
+			u, err := m.getUser(me.ID)
+			if err != nil {
+				me.User = &u
+			}
 		}
 	}
 
@@ -321,7 +367,7 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 }
 
 // Marshaled saves the marshaled data
-func (me *Member) Marshaled(m *Manager) (ma []byte, err error) {
+func (me *Member) Marshaled(updateUser bool, m *Manager) (ma []byte, err error) {
 	me.ID = me.User.ID
 
 	if res, err := m.Configuration.redisClient.HExists(
@@ -335,8 +381,9 @@ func (me *Member) Marshaled(m *Manager) (ma []byte, err error) {
 		}
 	}
 
-	if _, change := me.User.Mutual.Add(me.GuildID); change {
-		if err = me.User.Save(m); err != nil {
+	me.User.Mutual.Add(me.GuildID)
+	if updateUser {
+		if err = me.User.Mutual.Save(m); err != nil {
 			m.log.Error().Err(err).Msg("failed to update user from redis")
 		}
 	}
@@ -348,7 +395,7 @@ func (me *Member) Marshaled(m *Manager) (ma []byte, err error) {
 
 // Save saves the Member into redis
 func (me *Member) Save(m *Manager) (err error) {
-	ma, err := me.Marshaled(m)
+	ma, err := me.Marshaled(true, m)
 	if err != nil {
 		m.log.Error().Err(err).Msg("failed to marshal user")
 	}
@@ -375,11 +422,9 @@ func (me *Member) Delete(m *Manager) (err error) {
 	if err != nil {
 		m.log.Error().Err(err).Msg("failed to retrieve user from redis")
 	}
-	if _, change := u.Mutual.Remove(me.GuildID); change {
-		if err = u.Save(m); err != nil {
-			m.log.Error().Err(err).Msg("failed to update user from redis")
-		}
-	}
+
+	u.Mutual.Remove(me.GuildID)
+	err = u.Mutual.Save(m)
 
 	return
 }

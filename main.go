@@ -34,12 +34,15 @@ func main() {
 		*token,
 		"welcomer",
 		managerConfiguration{
-			NatsAddress:   "127.0.0.1:4222",
-			NatsChannel:   "welcomer",
-			ClientID:      "welcomer",
-			ClusterID:     "cluster",
-			RedisPrefix:   "welcomer",
-			ShardCount:    1,
+			NatsAddress: "127.0.0.1:4222",
+			NatsChannel: "welcomer",
+			ClientID:    "welcomer",
+			ClusterID:   "cluster",
+			RedisPrefix: "welcomer",
+			ShardCount:  1,
+			StateSettings: stateSettings{
+				CacheMembers: true,
+			},
 			IgnoredEvents: []string{"PRESENCE_UPDATE", "TYPING_START"},
 			redisOptions: &redis.Options{
 				Addr:     "127.0.0.1:6379",

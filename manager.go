@@ -52,6 +52,11 @@ type Manager struct {
 	Presence UpdateStatusData
 }
 
+// StateSettings represents all different state configurations
+type stateSettings struct {
+	CacheMembers bool `json:"cache_members"`
+}
+
 // ManagerConfiguration represents all configurable elements
 type managerConfiguration struct {
 	redisOptions *redis.Options
@@ -59,8 +64,8 @@ type managerConfiguration struct {
 	natsClient   *nats.Conn
 	stanClient   stan.Conn
 
-	// // States
-	// StateSettings stateSettings `json:"state" msgpack:"state"`
+	// States
+	StateSettings stateSettings `json:"state" msgpack:"state"`
 
 	// Manual sharding
 	Autoshard  bool `json:"autoshard" msgpack:"autoshard"`
@@ -352,6 +357,11 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 		return
 	}
 
+	u.Mutual = MutualGuilds{
+		Key: u.ID,
+	}
+	err = u.Mutual.Fetch(m)
+
 	return
 }
 
@@ -369,6 +379,9 @@ func (m *Manager) getMember(guildID string, userID string) (me Member, err error
 	if err != nil {
 		return
 	}
+
+	u, err := m.getUser(userID)
+	me.User = &u
 
 	return
 }
