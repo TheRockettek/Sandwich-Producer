@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -32,8 +33,8 @@ func main() {
 	flag.Parse()
 
 	pass, err := ioutil.ReadFile("REDIS_PASSWORD")
-	redisPassword := string(pass)
-	zlog.Info().Msgf("using redis password: %s", redisPassword)
+	redisPassword := strings.TrimSpace(string(pass))
+	zlog.Info().Msgf("using redis password: '%s'", redisPassword)
 
 	m := NewManager(
 		*token,
