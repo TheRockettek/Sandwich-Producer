@@ -241,62 +241,61 @@ type User struct {
 type MutualGuilds struct {
 	Guilds  LockSet
 	Removed LockSet
-	Key     string
 }
 
-// Add adds a mutual guild
-func (u *MutualGuilds) Add(val string) (err error) {
-	u.Guilds.Add(val)
-	u.Removed.Remove(val)
+// AddMutual adds a mutual guild
+func (u *User) AddMutual(val string) (err error) {
+	u.Mutual.Guilds.Add(val)
+	u.Mutual.Removed.Remove(val)
 	return
 }
 
-// Remove removes a mutual guild
-func (u *MutualGuilds) Remove(val string) (err error) {
-	u.Guilds.Remove(val)
-	u.Removed.Add(val)
+// RemoveMutual removes a mutual guild
+func (u *User) RemoveMutual(val string) (err error) {
+	u.Mutual.Guilds.Remove(val)
+	u.Mutual.Removed.Add(val)
 	return
 }
 
-// Save saves the User into redis
-func (u *MutualGuilds) Save(m *Manager) (err error) {
+// SaveMutual saves the User into redis
+func (u *User) SaveMutual(m *Manager) (err error) {
 	var vals []string
 
-	vals = u.Guilds.Get()
+	vals = u.Mutual.Guilds.Get()
 	if len(vals) > 0 {
 		println("guilds", len(vals))
 		err = m.Configuration.redisClient.SAdd(
 			ctx,
-			fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
+			fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.ID),
 			vals,
 		).Err()
 	}
 
-	vals = u.Removed.Get()
+	vals = u.Mutual.Removed.Get()
 	if len(vals) > 0 {
 		println("removed", len(vals))
 		err = m.Configuration.redisClient.SRem(
 			ctx,
-			fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
+			fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.ID),
 			vals,
 		).Err()
 	}
 
-	u.Removed.Values = make([]string, 0)
+	u.Mutual.Removed.Values = make([]string, 0)
 
 	return
 }
 
-// Fetch fills the mutual guilds set
-func (u *MutualGuilds) Fetch(m *Manager) (err error) {
+// FetchMutual fills the mutual guilds set
+func (u *User) FetchMutual(m *Manager) (err error) {
 	mutual, err := m.Configuration.redisClient.SMembers(
 		ctx,
-		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
+		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.ID),
 	).Result()
 
 	if err != nil {
 		for _, gid := range mutual {
-			u.Guilds.Add(gid)
+			u.Mutual.Guilds.Add(gid)
 		}
 	}
 
@@ -349,8 +348,8 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 		m.log.Error().Err(err).Msgf("error fetching user %s", me.ID)
 	}
 
-	me.User.Mutual.Add(me.GuildID)
-	err = me.User.Mutual.Save(m)
+	me.User.AddMutual(me.GuildID)
+	err = me.User.SaveMutual(m)
 
 	return
 }
@@ -387,9 +386,9 @@ func (me *Member) Marshaled(updateUser bool, m *Manager) (ma []byte, err error) 
 		}
 	}
 
-	me.User.Mutual.Add(me.GuildID)
+	me.User.AddMutual(me.GuildID)
 	if updateUser {
-		if err = me.User.Mutual.Save(m); err != nil {
+		if err = me.User.SaveMutual(m); err != nil {
 			m.log.Error().Err(err).Msg("failed to update user from redis")
 		}
 	}
@@ -429,8 +428,8 @@ func (me *Member) Delete(m *Manager) (err error) {
 		m.log.Error().Err(err).Msg("failed to retrieve user from redis")
 	}
 
-	u.Mutual.Remove(me.GuildID)
-	err = u.Mutual.Save(m)
+	u.RemoveMutual(me.GuildID)
+	err = u.SaveMutual(m)
 
 	return
 }

@@ -357,10 +357,8 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 		return
 	}
 
-	u.Mutual = MutualGuilds{
-		Key: u.ID,
-	}
-	err = u.Mutual.Fetch(m)
+	u.Mutual = MutualGuilds{}
+	err = u.FetchMutual(m)
 
 	return
 }
