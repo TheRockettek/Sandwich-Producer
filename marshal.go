@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/vmihailenco/msgpack"
 )
 
 var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent))
@@ -108,6 +110,13 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 					me.GuildID = guild.ID
 					ma, _ := me.Marshaled(false, m)
 					MemberMarshals[me.ID] = ma
+
+					ma, err = msgpack.Marshal(me)
+					if err != nil {
+						UserMarshals[me.ID] = ma
+					} else {
+						m.log.Warn().Err(err).Msg("failed to marshal user")
+					}
 				}
 
 				err = m.Configuration.redisClient.HSet(
