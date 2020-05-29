@@ -269,7 +269,7 @@ func (u *MutualGuilds) Save(m *Manager) (err error) {
 	err = m.Configuration.redisClient.SAdd(
 		ctx,
 		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
-		vals,
+		vals...,
 	).Err()
 
 	vals = make([]interface{}, 0)
@@ -279,7 +279,7 @@ func (u *MutualGuilds) Save(m *Manager) (err error) {
 	err = m.Configuration.redisClient.SRem(
 		ctx,
 		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.Key),
-		vals,
+		vals...,
 	).Err()
 
 	u.Removed.Values = make([]string, 0)
