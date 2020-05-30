@@ -585,6 +585,42 @@ func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
+func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	// This marshaler simply handles guild members chunks and will not forward the data
+	// to consumers as it is simply for states
+	var err error
+
+	chunkPayload := GuildMembersChunk{}
+	if err = json.Unmarshal(e.RawData, &chunkPayload); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBERS_CHUNK payload")
+	}
+
+	guild, err := m.getGuild(chunkPayload.GuildID)
+
+	MemberMarshals := make(map[string]interface{})
+	for _, me := range chunkPayload.Members {
+		me.GuildID = guild.ID
+		ma, err := me.Marshaled(true, m)
+		MemberMarshals[me.ID] = ma
+		if err != nil {
+			m.log.Error().Err(err).Msg("failed to marshal member")
+		}
+	}
+
+	err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guild.ID),
+		MemberMarshals,
+	).Err()
+	if err != nil {
+		m.log.Error().Err(err).Msg("failed to add members to state")
+	}
+
+	m.log.Info().Msgf("Added %d members from chunk for guild %s", len(chunkPayload.Members), guild.ID)
+
+	return
+}
+
 // func customEventMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 // }
 
@@ -610,7 +646,7 @@ func init() {
 	addMarshaler("GUILD_MEMBER_ADD", guildMemberAddMarshaler)
 	addMarshaler("GUILD_MEMBER_REMOVE", guildMemberRemoveMarshaler)
 	addMarshaler("GUILD_MEMBER_UPDATE", guildMemberUpdateMarshaler)
-	// GUILD_MEMBERS_CHUNK
+	addMarshaler("GUILD_MEMBERS_CHUNK", guildMembersChunkMarshaler)
 
 	// GUILD_BAN_ADD
 	// GUILD_BAN_REMOVE
