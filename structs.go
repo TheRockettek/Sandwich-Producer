@@ -421,7 +421,7 @@ func (me *Member) Delete(m *Manager) (err error) {
 		me.User.ID,
 	).Err()
 
-	u, err := m.getUser(me.ID)
+	u, err := m.getUser(me.User.ID)
 	if err != nil {
 		m.log.Error().Err(err).Msg("failed to retrieve user from redis")
 	}

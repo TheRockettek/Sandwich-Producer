@@ -224,7 +224,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	// The GuildRoleCreate struct contains the role and guild id
 	guildRole := GuildRoleCreate{}
 	if err = json.Unmarshal(e.RawData, &guildRole); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild role create payload")
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_ROLE_CREATE payload")
 		return
 	}
 
@@ -261,7 +261,7 @@ func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	guildRole := GuildRoleDelete{}
 	err = json.Unmarshal(e.RawData, &guildRole)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild role create payload")
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_ROLE_DELETE payload")
 		return
 	}
 
@@ -314,7 +314,7 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	guildRole := GuildRoleCreate{}
 	err = json.Unmarshal(e.RawData, &guildRole)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild role create payload")
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_ROLE_UPDATE payload")
 		return
 	}
 
@@ -352,7 +352,7 @@ func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 
 	guildChannel := Channel{}
 	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild channel create payload")
+		m.log.Error().Err(err).Msg("failed to unmarshal guild CHANNEL_CREATE payload")
 		return
 	}
 
@@ -386,7 +386,7 @@ func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 
 	updatedChannel := Channel{}
 	if err = json.Unmarshal(e.RawData, &updatedChannel); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild channel update payload")
+		m.log.Error().Err(err).Msg("failed to unmarshal CHANNEL_UPDATE payload")
 		return
 	}
 
@@ -424,13 +424,13 @@ func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 
 	guildChannel := Channel{}
 	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild channel update payload")
+		m.log.Error().Err(err).Msg("failed to unmarshal CHANNEL_DELETE payload")
 		return
 	}
 
 	guild, err := m.getGuild(guildChannel.GuildID)
 	if err != nil {
-		m.log.Error().Err(err).Msgf("CHANNEL_UPDATE referenced unknown guild %s", guildChannel.GuildID)
+		m.log.Error().Err(err).Msgf("CHANNEL_DELETE referenced unknown guild %s", guildChannel.GuildID)
 	}
 
 	if err = guildChannel.Delete(m); err != nil {
@@ -464,7 +464,7 @@ func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEve
 
 	pinsPayload := ChannelPinsUpdate{}
 	if err = json.Unmarshal(e.RawData, &pinsPayload); err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild channel update payload")
+		m.log.Error().Err(err).Msg("failed to unmarshal CHANNEL_PINS_UPDATE payload")
 		return
 	}
 
@@ -483,6 +483,103 @@ func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEve
 	se = StreamEvent{
 		Type: "CHANNEL_PINS_UPDATE",
 		Data: &pinsPayload,
+	}
+
+	return
+}
+
+func guildMemberAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	memberPayload := Member{}
+	if err = json.Unmarshal(e.RawData, &memberPayload); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBER_ADD payload")
+		return
+	}
+
+	ma, err := memberPayload.Marshaled(true, m)
+	err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, memberPayload.GuildID),
+		memberPayload.ID,
+		ma,
+	).Err()
+
+	ok = true
+	se = StreamEvent{
+		Type: "GUILD_MEMBER_ADD",
+		Data: &memberPayload,
+	}
+
+	return
+}
+
+func guildMemberRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	memberPayload := Member{}
+	if err = json.Unmarshal(e.RawData, &memberPayload); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBER_REMOVE payload")
+	}
+
+	err = memberPayload.Delete(m)
+
+	// // Remove the guild from their user mutual set
+	// u, err := m.getUser(memberPayload.ID)
+	// if err != nil {
+	// 	m.log.Error().Err(err).Msgf("GUILD_MEMBER_REMOVE referenced unknown member %s in guild %s", memberPayload.ID, memberPayload.GuildID)
+	// }
+
+	// if change, _ := u.RemoveMutual(memberPayload.GuildID); change {
+	// 	err = u.SaveMutual(m)
+	// }
+
+	// m.Configuration.redisClient.Del(
+	// 	ctx,
+	// 	fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, memberPayload.GuildID),
+	// 	memberPayload.ID,
+	// )
+
+	ok = true
+	se = StreamEvent{
+		Type: "GUILD_MEMBER_REMOVE",
+		Data: &memberPayload,
+	}
+
+	return
+}
+
+func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+	var err error
+
+	updatedMember := Member{}
+	if err = json.Unmarshal(e.RawData, &updatedMember); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBER_UPDATE payload")
+	}
+
+	member, err := m.getMember(updatedMember.GuildID, updatedMember.ID)
+	if err != nil {
+		m.log.Error().Err(err).Msgf("GUILD_MEMBER_UPDATE referenced unknown member %s in guild %s", updatedMember.ID, updatedMember.GuildID)
+	}
+
+	if err = updatedMember.Save(m); err != nil {
+		m.log.Error().Err(err).Msg("failed to update member")
+	}
+
+	if !reflect.DeepEqual(&member, &updatedMember) {
+		ok = true
+		se = StreamEvent{
+			Type: "GUILD_MEMBER_UPDATE",
+			Data: struct {
+				Before *Member `msgpack:"before"`
+				After  *Member `msgpack:"after"`
+			}{
+				Before: &member,
+				After:  &updatedMember,
+			},
+		}
+	} else {
+		ok = false
 	}
 
 	return
@@ -510,13 +607,9 @@ func init() {
 	addMarshaler("CHANNEL_DELETE", guildChannelDeleteMarshaler)
 	addMarshaler("CHANNEL_PINS_UPDATE", guildChannelPinsUpdateMarshaler)
 
-	// addMarshaler("GUILD_MEMBER_ADD", guildMemberAddMarshaler)
-	// addMarshaler("GUILD_MEMBER_REMOVE", guildMemberRemoveMarshaler)
-	// addMarshaler("GUILD_MEMBER_UPDATE", guildMemberUpdateMarshaler)
-
-	// GUILD_MEMBER_ADD
-	// GUILD_MEMBER_REMOVE
-	// GUILD_MEMBER_UPDATE
+	addMarshaler("GUILD_MEMBER_ADD", guildMemberAddMarshaler)
+	addMarshaler("GUILD_MEMBER_REMOVE", guildMemberRemoveMarshaler)
+	addMarshaler("GUILD_MEMBER_UPDATE", guildMemberUpdateMarshaler)
 	// GUILD_MEMBERS_CHUNK
 
 	// GUILD_BAN_ADD
