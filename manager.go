@@ -238,10 +238,11 @@ func (m *Manager) Gateway() (st *GatewayBotResponse, err error) {
 // along with modifying the origional structure to a more suitable one for streaming.
 func (m *Manager) OnEvent(e Event) (ok bool, se StreamEvent) {
 	var data StreamEvent
-	var ma func(*Manager, Event) (bool, StreamEvent)
+	var ma func(*Manager, Event) (bool, StreamEvent, error)
+	var err error
 
 	if ma, ok = marshalers[e.Type]; ok {
-		ok, data = ma(m, e)
+		ok, data, err = ma(m, e)
 		if ok {
 			se = data
 		}
@@ -253,6 +254,10 @@ func (m *Manager) OnEvent(e Event) (ok bool, se StreamEvent) {
 	// if it is empty!
 	if se.Type == "" {
 		se.Type = e.Type
+	}
+
+	if err != nil {
+		m.log.Warn().Err(err).Msgf("Failed to handle %s due to error", se.Type)
 	}
 
 	return

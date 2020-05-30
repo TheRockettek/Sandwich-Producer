@@ -5,7 +5,7 @@ import (
 	"reflect"
 )
 
-var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent))
+var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent, error))
 
 // Marshalers are used to both handle state caching and also produce a structure that is sent to consumers.
 // The boolean in a marshaler dictates if that event should be directed to consumers for manual overrides.
@@ -13,14 +13,14 @@ var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent))
 // sent to consumers.
 
 // addMarshaler adds a marshaler for a specific event.
-func addMarshaler(event string, marshaler func(*Manager, Event) (bool, StreamEvent)) {
+func addMarshaler(event string, marshaler func(*Manager, Event) (bool, StreamEvent, error)) {
 	if _, ok := marshalers[event]; ok {
 		return
 	}
 	marshalers[event] = marshaler
 }
 
-func shardReadyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+func shardReadyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	ok, se.Data = true, e.Data
 	m.log.Info().Msgf("Shard %d is ready", e.Data.(struct {
 		ShardID int `msgpack:"shard_id"`
@@ -28,19 +28,16 @@ func shardReadyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func shardDisconnectMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+func shardDisconnectMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	ok, se.Data = true, e.Data
 	m.log.Info().Msgf("Shard %d has disconnected with code %d", se.Data.(ShardDisconnectOp).ShardID, se.Data.(ShardDisconnectOp).StatusCode)
 	return
 }
 
-func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-
+func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	ready := Ready{}
 	err = json.Unmarshal(e.RawData, &ready)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal ready")
 		return
 	}
 
@@ -53,13 +50,10 @@ func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-
+func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	guild := MarshalGuild{}
 	err = guild.Create(e.RawData)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild")
 		return
 	}
 
@@ -76,12 +70,10 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 
 	err = guild.Save(m)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to save guild")
+		m.log.Error().Err(err).Msg("Failed to store guild")
+		err = nil
 	}
 
-	if err != nil {
-		m.log.Error().Err(err).Msg("failed to check for guild in cache")
-	}
 	// Check if guild is in the pending availability map or is currently in cache.
 	if un, uo := m.Unavailables[guild.ID]; uo || ic {
 		// If the guild was unavailable, this means it is now available so fire the
@@ -107,7 +99,8 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 					ma, err := me.Marshaled(true, m)
 					MemberMarshals[me.ID] = ma
 					if err != nil {
-						m.log.Error().Err(err).Msg("failed to marshal member")
+						m.log.Error().Err(err).Msgf("Failed to marshal member '%s' struct", me.ID)
+						err = nil
 					}
 				}
 
@@ -117,10 +110,11 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 					MemberMarshals,
 				).Err()
 				if err != nil {
-					m.log.Error().Err(err).Msg("failed to add members to state")
+					m.log.Error().Err(err).Msg("Failed to store members")
+					err = nil
 				}
 
-				m.log.Info().Msgf("Added %d members to state for guild %s", len(guild.Members), guild.ID)
+				m.log.Info().Msgf("Added %d member(s) to state for guild %s", len(guild.Members), guild.ID)
 			}
 		}
 
@@ -136,22 +130,17 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		}
 	}
 
-	return ok, se
+	return
 }
 
-func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-	var rawData string
-
+func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	partialGuild := UnavailableGuild{}
 	err = json.Unmarshal(e.RawData, &partialGuild)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal partial guild")
+		m.log.Error().Err(err).Msg("Failed to unmarshal UnavailableGuild struct")
+		err = nil
 		return
 	}
-
-	guild := MarshalGuild{}
-	guild.From([]byte(rawData))
 
 	delete(m.Unavailables, partialGuild.ID)
 
@@ -161,41 +150,43 @@ func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 		ok = true
 		se = StreamEvent{
 			Type: "GUILD_UNAVAILABLE",
-			Data: guild,
+			Data: partialGuild,
 		}
 	} else {
 		// user has left guild
-		if err = guild.Delete(m); err != nil {
-			m.log.Error().Err(err).Msg("failed to remove guild")
+		if err = partialGuild.Delete(m); err != nil {
+			m.log.Error().Err(err).Msg("Failed to delete guild")
+			err = nil
 		}
 
 		ok = true
 		se = StreamEvent{
 			Type: "GUILD_REMOVE",
-			Data: &guild,
+			Data: &partialGuild,
 		}
 	}
 
 	return
 }
 
-func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-
+func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	updatedGuild := MarshalGuild{}
 	err = updatedGuild.Create(e.RawData)
 	if err != nil {
-		m.log.Error().Err(err).Msg("failed to unmarshal guild")
+		m.log.Error().Err(err).Msg("Failed to create MarshalGuild")
+		err = nil
 		return
 	}
 
 	guild, err := m.getGuild(updatedGuild.ID)
 	if err != nil {
-		m.log.Error().Err(err).Msgf("GUILD_UPDATE referenced unknown guild %s", updatedGuild.ID)
+		m.log.Error().Err(err).Msgf("GUILD_UPDATE referenced unknown guild '%s'", updatedGuild.ID)
+		err = nil
 	}
 
 	if err = updatedGuild.Save(m); err != nil {
-		m.log.Error().Err(err).Msg("failed to update guild")
+		m.log.Error().Err(err).Msg("Failed to update Guild")
+		err = nil
 	}
 
 	if !reflect.DeepEqual(&guild, &updatedGuild) {
@@ -218,9 +209,7 @@ func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-
+func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	// The GuildRoleCreate struct contains the role and guild id
 	guildRole := GuildRoleCreate{}
 	if err = json.Unmarshal(e.RawData, &guildRole); err != nil {
@@ -254,9 +243,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-
+func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	// The GuildRole struct contains the role and guild id
 	guildRole := GuildRoleDelete{}
 	err = json.Unmarshal(e.RawData, &guildRole)
@@ -308,9 +295,7 @@ func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-
+func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	guildRole := GuildRoleCreate{}
 	err = json.Unmarshal(e.RawData, &guildRole)
 	if err != nil {
@@ -347,9 +332,7 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-
+func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	guildChannel := Channel{}
 	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal guild CHANNEL_CREATE payload")
@@ -381,9 +364,7 @@ func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 	return
 }
 
-func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
-
+func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	updatedChannel := Channel{}
 	if err = json.Unmarshal(e.RawData, &updatedChannel); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal CHANNEL_UPDATE payload")
@@ -419,8 +400,7 @@ func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 	return
 }
 
-func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
+func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	guildChannel := Channel{}
 	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
@@ -459,8 +439,7 @@ func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) 
 	return
 }
 
-func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
+func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	pinsPayload := ChannelPinsUpdate{}
 	if err = json.Unmarshal(e.RawData, &pinsPayload); err != nil {
@@ -488,8 +467,7 @@ func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEve
 	return
 }
 
-func guildMemberAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
+func guildMemberAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	memberPayload := Member{}
 	if err = json.Unmarshal(e.RawData, &memberPayload); err != nil {
@@ -514,8 +492,7 @@ func guildMemberAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func guildMemberRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
+func guildMemberRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	memberPayload := Member{}
 	if err = json.Unmarshal(e.RawData, &memberPayload); err != nil {
@@ -549,17 +526,18 @@ func guildMemberRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
-	var err error
+func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	updatedMember := Member{}
 	if err = json.Unmarshal(e.RawData, &updatedMember); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBER_UPDATE payload")
+		return
 	}
 
 	member, err := m.getMember(updatedMember.GuildID, updatedMember.ID)
 	if err != nil {
 		m.log.Error().Err(err).Msgf("GUILD_MEMBER_UPDATE referenced unknown member %s in guild %s", updatedMember.ID, updatedMember.GuildID)
+		return
 	}
 
 	if err = updatedMember.Save(m); err != nil {
@@ -585,17 +563,20 @@ func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	// This marshaler simply handles guild members chunks and will not forward the data
 	// to consumers as it is simply for states
-	var err error
 
 	chunkPayload := GuildMembersChunk{}
 	if err = json.Unmarshal(e.RawData, &chunkPayload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBERS_CHUNK payload")
+		return
 	}
 
 	guild, err := m.getGuild(chunkPayload.GuildID)
+	if err != nil {
+		return
+	}
 
 	MemberMarshals := make(map[string]interface{})
 	for _, me := range chunkPayload.Members {
@@ -621,7 +602,24 @@ func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
 	return
 }
 
-// func customEventMarshaler(m *Manager, e Event) (ok bool, se StreamEvent) {
+func guildBanAdd(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
+	payload := GuildBanAdd{}
+	if err = json.Unmarshal(e.RawData, &payload); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_BAN_ADD payload")
+		return
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: e.Type,
+		Data: payload,
+	}
+
+	return
+}
+
+// func customEventMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 // }
 
 func init() {
