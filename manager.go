@@ -115,23 +115,37 @@ func NewManager(token string, identity string, configuration managerConfiguratio
 // ClearCache removes keys from redis. There is definitely a more inteligent way of doing this.
 func (m *Manager) ClearCache() (err error) {
 	var keys []string
+	deleted := int64(0)
 	iter := m.Configuration.redisClient.Scan(
 		ctx,
 		0,
 		fmt.Sprintf("%s:*", m.Configuration.RedisPrefix),
-		0,
+		8,
 	).Iterator()
 
 	for iter.Next(ctx) {
 		keys = append(keys, iter.Val())
+
+		if len(keys) > 256 {
+			_deleted, err := m.Configuration.redisClient.Del(
+				ctx,
+				keys...,
+			).Result()
+			deleted += _deleted
+			if err != nil {
+				m.log.Error().Err(err).Msg("failed to remove keys")
+			}
+			keys = []string{}
+		}
+
 	}
 
-	deleted := int64(0)
 	if len(keys) > 0 {
-		deleted, err = m.Configuration.redisClient.Del(
+		_deleted, err := m.Configuration.redisClient.Del(
 			ctx,
 			keys...,
 		).Result()
+		deleted += _deleted
 		if err != nil {
 			m.log.Error().Err(err).Msg("failed to remove keys")
 		}
