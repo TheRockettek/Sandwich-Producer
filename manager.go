@@ -166,17 +166,14 @@ func (m *Manager) Open() (err error) {
 	m.log.Info().Int("shards", m.ShardCount).Bool("autosharded", m.Configuration.Autoshard).Msg("creating sessions")
 	m.Sessions = make(map[int]*Session)
 
-	for shardID := 0; shardID < m.ShardCount; shardID++ {
-		m.Sessions[shardID] = NewSession(m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
-		m.Sessions[shardID].Presence = m.Presence
-	}
-
 	go m.ForwardEvents()
 	go m.ForwardProduce()
 
 	for shardID := 0; shardID < m.ShardCount; shardID++ {
-		session := m.Sessions[shardID]
 		m.log.Info().Int("shard", shardID).Msg("starting session")
+		session := NewSession(m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
+		session.Presence = m.Presence
+		m.Sessions[shardID] = session
 		err = session.Open()
 		if err != nil {
 			return

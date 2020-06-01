@@ -114,7 +114,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 					err = nil
 				}
 
-				m.log.Info().Msgf("Added %d member(s) to state for guild %s", len(guild.Members), guild.ID)
+				m.log.Trace().Msgf("Added %d member(s) to state for guild %s", len(guild.Members), guild.ID)
 			}
 		}
 
@@ -597,7 +597,7 @@ func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 		m.log.Error().Err(err).Msg("failed to add members to state")
 	}
 
-	m.log.Info().Msgf("Added %d members from chunk for guild %s", len(chunkPayload.Members), guild.ID)
+	m.log.Trace().Msgf("Added %d members from chunk for guild %s", len(chunkPayload.Members), guild.ID)
 
 	return
 }
