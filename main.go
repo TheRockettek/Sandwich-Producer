@@ -46,7 +46,7 @@ func main() {
 			ClusterID:   "cluster",
 			RedisPrefix: "welcomer",
 			ShardCount:  1,
-			StateSettings: stateSettings{
+			Features: features{
 				CacheMembers: true,
 			},
 			IgnoredEvents: []string{"PRESENCE_UPDATE", "TYPING_START"},

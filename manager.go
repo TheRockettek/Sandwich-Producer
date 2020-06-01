@@ -52,9 +52,13 @@ type Manager struct {
 	Presence UpdateStatusData
 }
 
-// StateSettings represents all different state configurations
-type stateSettings struct {
+// features defines different settings for specific things that the
+// gateway can do
+type features struct {
 	CacheMembers bool `json:"cache_members"`
+	// TODO: IgnoreBots: Will ignore bots in MESSAGE_* events
+	// TODO: CheckPrefix: MESSAGE_CREATE will not pass message if message does not have the guild prefix set.
+	// TODO: StoreMutuals: Add checks to the current mutual setup
 }
 
 // ManagerConfiguration represents all configurable elements
@@ -65,7 +69,7 @@ type managerConfiguration struct {
 	stanClient   stan.Conn
 
 	// States
-	StateSettings stateSettings `json:"state" msgpack:"state"`
+	Features features `json:"features" msgpack:"features"`
 
 	// Manual sharding
 	Autoshard  bool `json:"autoshard" msgpack:"autoshard"`

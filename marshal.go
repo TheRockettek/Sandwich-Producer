@@ -92,7 +92,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 		}
 		// If not unavailable and not in cache, it is initial guild create
 		if !(un && ic) {
-			if m.Configuration.StateSettings.CacheMembers {
+			if m.Configuration.Features.CacheMembers {
 				MemberMarshals := make(map[string]interface{})
 				for _, me := range guild.Members {
 					me.GuildID = guild.ID
@@ -619,18 +619,6 @@ func guildBanAdd(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	return
 }
 
-func temp(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
-
-	messagePayload := MessageCreate{}
-	if err = json.Unmarshal(e.RawData, &messagePayload); err != nil {
-		return
-	}
-
-	fmt.Printf("%s: %s\n", messagePayload.Author.Username, messagePayload.Content)
-
-	return
-}
-
 // func customEventMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 // }
 
@@ -675,7 +663,7 @@ func init() {
 	// PRESENCE_UPDATE
 	// USER_UPDATE
 
-	addMarshaler("MESSAGE_CREATE", temp)
+	// MESSAGE_CREATE
 	// MESSAGE_UPDATE
 	// MESSAGE_DELETE
 	// MESSAGE_DELETE_BULK
