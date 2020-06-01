@@ -468,20 +468,21 @@ func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEve
 }
 
 func guildMemberAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
-
 	memberPayload := Member{}
 	if err = json.Unmarshal(e.RawData, &memberPayload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBER_ADD payload")
 		return
 	}
 
-	ma, err := memberPayload.Marshaled(true, m)
-	err = m.Configuration.redisClient.HSet(
-		ctx,
-		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, memberPayload.GuildID),
-		memberPayload.ID,
-		ma,
-	).Err()
+	if m.Configuration.Features.CacheMembers {
+		ma, _ := memberPayload.Marshaled(true, m)
+		err = m.Configuration.redisClient.HSet(
+			ctx,
+			fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, memberPayload.GuildID),
+			memberPayload.ID,
+			ma,
+		).Err()
+	}
 
 	ok = true
 	se = StreamEvent{
@@ -578,6 +579,9 @@ func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 		return
 	}
 
+	// Really should rewrite this to not marshal the user object if we are
+	// not caching members... We still have this as Marshaled(true, m) will
+	// add the mutual guild still.
 	MemberMarshals := make(map[string]interface{})
 	for _, me := range chunkPayload.Members {
 		me.GuildID = guild.ID
@@ -588,13 +592,15 @@ func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 		}
 	}
 
-	err = m.Configuration.redisClient.HSet(
-		ctx,
-		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guild.ID),
-		MemberMarshals,
-	).Err()
-	if err != nil {
-		m.log.Error().Err(err).Msg("failed to add members to state")
+	if m.Configuration.Features.CacheMembers {
+		err = m.Configuration.redisClient.HSet(
+			ctx,
+			fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guild.ID),
+			MemberMarshals,
+		).Err()
+		if err != nil {
+			m.log.Error().Err(err).Msg("failed to add members to state")
+		}
 	}
 
 	m.log.Trace().Msgf("Added %d members from chunk for guild %s", len(chunkPayload.Members), guild.ID)
