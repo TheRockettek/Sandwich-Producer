@@ -619,6 +619,18 @@ func guildBanAdd(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	return
 }
 
+func temp(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
+	messagePayload := MessageCreate{}
+	if err = json.Unmarshal(e.RawData, &messagePayload); err != nil {
+		return
+	}
+
+	fmt.Printf("%s: %s\n", messagePayload.Author.Username, messagePayload.Content)
+
+	return
+}
+
 // func customEventMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 // }
 
@@ -663,7 +675,7 @@ func init() {
 	// PRESENCE_UPDATE
 	// USER_UPDATE
 
-	// MESSAGE_CREATE
+	addMarshaler("MESSAGE_CREATE", temp)
 	// MESSAGE_UPDATE
 	// MESSAGE_DELETE
 	// MESSAGE_DELETE_BULK
