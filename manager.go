@@ -123,6 +123,9 @@ func (m *Manager) ClearCache() (err error) {
 		8,
 	).Iterator()
 
+	m.log.Info().Msg("deleting keys...")
+	now := time.Now()
+
 	for iter.Next(ctx) {
 		keys = append(keys, iter.Val())
 
@@ -138,6 +141,11 @@ func (m *Manager) ClearCache() (err error) {
 			keys = []string{}
 		}
 
+		_now := time.Now()
+		if _now.Sub(now) > time.Second {
+			m.log.Info().Msgf("deleted %d keys so far", deleted)
+			now = _now
+		}
 	}
 
 	if len(keys) > 0 {
