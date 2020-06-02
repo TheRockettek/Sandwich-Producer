@@ -510,7 +510,7 @@ func (ug *UnavailableGuild) Delete(m *Manager) (err error) {
 		},
 	).Result()
 
-	println(res)
+	println(res.(int))
 
 	return
 }

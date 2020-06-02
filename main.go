@@ -67,7 +67,11 @@ func main() {
 	}
 	err = ug.Delete(m)
 
-	panic(err.Error())
+	if err != nil {
+		panic(err.Error())
+	} else {
+		panic("fine")
+	}
 
 	// err = m.ClearCache()
 	// if err != nil {
