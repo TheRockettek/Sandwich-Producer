@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
-	"reflect"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -406,10 +405,16 @@ func (m *Manager) getMember(guildID string, userID string) (me Member, err error
 		return
 	}
 
-	u, err := m.getUser(userID)
-	me.User = &u
+	if !me.UserIncluded {
+		u, err := m.getUser(userID)
+		if err != nil {
+			return me, err
+		}
 
-	println(reflect.DeepEqual(&u, me.User))
+		me.User = &u
+		me.UserIncluded = true
+	}
+
 	return
 }
 

@@ -341,6 +341,9 @@ type Member struct {
 
 	// When the user used their Nitro boost on the server
 	PremiumSince Timestamp `json:"premium_since" msgpack:"premium_since"`
+
+	// Boolean to detect when a user has been added
+	UserIncluded bool `json:"-" msgpack:"-"`
 }
 
 // From creates a member object from bytes that is expected to be from
@@ -372,12 +375,14 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 // in the member struct is already filled out.
 func (me *Member) FetchUser(m *Manager) (err error) {
 
-	if me.ID != "" {
+	if me.ID != "" && !me.UserIncluded {
 		u, err := m.getUser(me.ID)
 		if err == nil {
 			me.User = &u
+			me.UserIncluded = true
 		}
 	}
+
 	return
 }
 
@@ -385,14 +390,17 @@ func (me *Member) FetchUser(m *Manager) (err error) {
 func (me *Member) Marshaled(updateUser bool, m *Manager) (ma []byte, err error) {
 	me.ID = me.User.ID
 
-	if res, err := m.Configuration.redisClient.HExists(
-		ctx,
-		fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
-		me.ID,
-	).Result(); err == nil {
-		if res {
-			u, _ := m.getUser(me.ID)
-			me.User = &u
+	if !me.UserIncluded {
+		if res, err := m.Configuration.redisClient.HExists(
+			ctx,
+			fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
+			me.ID,
+		).Result(); err == nil {
+			if res {
+				u, _ := m.getUser(me.ID)
+				me.User = &u
+				me.UserIncluded = true
+			}
 		}
 	}
 
@@ -433,13 +441,17 @@ func (me *Member) Delete(m *Manager) (err error) {
 		me.User.ID,
 	).Err()
 
-	u, err := m.getUser(me.User.ID)
-	if err != nil {
-		m.log.Error().Err(err).Msg("failed to retrieve user from redis")
+	if !me.UserIncluded {
+		u, err := m.getUser(me.User.ID)
+		if err != nil {
+			m.log.Error().Err(err).Msg("failed to retrieve user from redis")
+		}
+		u.RemoveMutual(me.GuildID)
+		err = u.SaveMutual(m)
+	} else {
+		me.User.RemoveMutual(me.GuildID)
+		err = me.User.SaveMutual(m)
 	}
-
-	u.RemoveMutual(me.GuildID)
-	err = u.SaveMutual(m)
 
 	return
 }
