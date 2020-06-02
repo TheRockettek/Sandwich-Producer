@@ -516,22 +516,6 @@ func guildMemberRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 
 	err = memberPayload.Delete(m)
 
-	// // Remove the guild from their user mutual set
-	// u, err := m.getUser(memberPayload.ID)
-	// if err != nil {
-	// 	m.log.Error().Err(err).Msgf("GUILD_MEMBER_REMOVE referenced unknown member %s in guild %s", memberPayload.ID, memberPayload.GuildID)
-	// }
-
-	// if change, _ := u.RemoveMutual(memberPayload.GuildID); change {
-	// 	err = u.SaveMutual(m)
-	// }
-
-	// m.Configuration.redisClient.Del(
-	// 	ctx,
-	// 	fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, memberPayload.GuildID),
-	// 	memberPayload.ID,
-	// )
-
 	ok = true
 	se = StreamEvent{
 		Type: "GUILD_MEMBER_REMOVE",
@@ -659,7 +643,7 @@ func guildBanRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err 
 func guildEmojisUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	payload := GuildEmojisUpdate{}
-	if err = json.Unmarshal(e.RawData, &payload); err != err {
+	if err = json.Unmarshal(e.RawData, &payload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_EMOJIS_UPDATE payload")
 		return
 	}
@@ -690,6 +674,24 @@ func guildEmojisUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 			g.ID,
 			ma,
 		).Err()
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: e.Type,
+		Data: &payload,
+	}
+
+	return
+}
+
+func guildIntegrationsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+	// What is even the point of this event...
+
+	payload := GuildIntegrationsUpdate{}
+	if err = json.Unmarshal(e.RawData, &payload); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_INTEGRATIONS_UPDATE payload")
+		return
 	}
 
 	ok = true
@@ -732,6 +734,8 @@ func init() {
 	addMarshaler("GUILD_BAN_REMOVE", guildBanRemoveMarshaler)
 
 	addMarshaler("GUILD_EMOJIS_UPDATE", guildEmojisUpdateMarshaler)
+
+	addMarshaler("GUILD_INTEGRATIONS_UPDATE", guildIntegrationsUpdateMarshaler)
 
 	// GUILD_INTEGRATIONS_UPDATE
 
