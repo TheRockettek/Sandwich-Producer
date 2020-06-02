@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/vmihailenco/msgpack"
 )
 
@@ -14,6 +15,18 @@ const (
 	GameTypeListening
 	GameTypeWatching
 )
+
+var removeGuildMembers = redis.NewScript(`
+	local prepend = KEYS[1]
+	local guildid = KEYS[2]
+	local memberskey = prepend .. ":guild:" .. guildid .. ":members"
+	local members = redis.call("hkeys", memberskey)
+	for _, k in pairs(members) do
+		redis.call("srem", prepend .. ":user:" .. k .. ":mutual", guildid)
+	end
+	redis.call("del", memberskey)
+	return #members
+`)
 
 // Constants for Status with the different current available status
 const (
@@ -487,6 +500,17 @@ func (ug *UnavailableGuild) Delete(m *Manager) (err error) {
 		fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
 		ug.ID,
 	).Err()
+
+	res, err := removeGuildMembers.Run(
+		ctx,
+		m.Configuration.redisClient,
+		[]string{
+			m.Configuration.RedisPrefix,
+			ug.ID,
+		},
+	).Result()
+
+	println(res)
 
 	return
 }
