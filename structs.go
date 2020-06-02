@@ -376,17 +376,12 @@ func (me *Member) FetchUser(m *Manager) (err error) {
 
 	if me.ID != "" {
 		u, err := m.getUser(me.ID)
-		if err != nil {
+		if err == nil {
 			fmt.Printf("fub: %v\n", u.Mutual.Guilds.Get())
 			me.User = &u
 			fmt.Printf("fub: %v\n", me.User.Mutual.Guilds.Get())
-		} else {
-			println("error", err.Error())
 		}
-	} else {
-		println("no id")
 	}
-
 	return
 }
 
