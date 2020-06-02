@@ -273,8 +273,6 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 		requests.Remove(v)
 	}
 
-	fmt.Printf("%v - %v = %v\n", u.Mutual.Guilds.Get(), u.Mutual.Origional, requests.Get())
-
 	vals = requests.Get()
 	if len(vals) > 0 {
 		err = m.Configuration.redisClient.SAdd(
@@ -317,7 +315,7 @@ func (u *User) FetchMutual(m *Manager) (err error) {
 		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.ID),
 	).Result()
 
-	if err != nil {
+	if err == nil {
 		for _, gid := range mutual {
 			u.Mutual.Guilds.Add(gid)
 		}
