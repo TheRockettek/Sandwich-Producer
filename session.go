@@ -212,7 +212,7 @@ func (s *Session) Open() error {
 	s.LastHeartbeatAck = time.Now().UTC()
 
 	var h Hello
-	if err = json.Unmarshal(e.RawData, &h); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &h); err != nil {
 		err = fmt.Errorf("error unmarshalling Hello, %s", err)
 		return err
 	}
@@ -398,7 +398,7 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 
 	// Decode the event into an Event struct.
 	var e *Event
-	decoder := json.NewDecoder(reader)
+	decoder := jsoniter.NewDecoder(reader)
 	if err = decoder.Decode(&e); err != nil {
 		s.log.Error().Err(err).Msg("error decoding websocket message")
 		return e, err

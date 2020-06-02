@@ -1,10 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
-
-	jsoniter "github.com/json-iterator/go"
 )
 
 // StreamEvent provides the struct for events that are sent over STAN/NATS
@@ -15,10 +14,10 @@ type StreamEvent struct {
 
 // Event provides a basic initial struct for all websocket events.
 type Event struct {
-	Operation int                 `json:"op" msgpack:"op"`
-	Sequence  int64               `json:"s" msgpack:"s"`
-	Type      string              `json:"t" msgpack:"t"`
-	RawData   jsoniter.RawMessage `json:"d" msgpack:"-"`
+	Operation int             `json:"op" msgpack:"op"`
+	Sequence  int64           `json:"s" msgpack:"s"`
+	Type      string          `json:"t" msgpack:"t"`
+	RawData   json.RawMessage `json:"d" msgpack:"-"`
 
 	// Marshalled event
 	Data interface{} `json:"-" msgpack:"d"`

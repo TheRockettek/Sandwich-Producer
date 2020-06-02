@@ -235,7 +235,7 @@ func (m *Manager) Gateway() (st *GatewayBotResponse, err error) {
 	switch resp.StatusCode {
 	case 429:
 		rl := TooManyRequests{}
-		err = json.Unmarshal(response, &rl)
+		err = jsoniter.Unmarshal(response, &rl)
 		if err != nil {
 			m.log.Error().Err(err).Msg("rate limit unmarshal error")
 			return
@@ -249,7 +249,7 @@ func (m *Manager) Gateway() (st *GatewayBotResponse, err error) {
 		return
 	}
 
-	err = json.Unmarshal(response, &st)
+	err = jsoniter.Unmarshal(response, &st)
 	if err != nil {
 		return
 	}

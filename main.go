@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	jsoniter "github.com/json-iterator/go"
+	jsoniterator "github.com/json-iterator/go"
 	"github.com/rs/zerolog"
 )
 
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
+var jsoniter = jsoniterator.ConfigCompatibleWithStandardLibrary
 var zlog = zerolog.New(zerolog.ConsoleWriter{
 	Out:        os.Stdout,
 	TimeFormat: time.Stamp,

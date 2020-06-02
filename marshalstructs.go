@@ -1,9 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/vmihailenco/msgpack"
 )
 
@@ -123,9 +123,8 @@ type MarshalGuild struct {
 
 // Create takes a discord guild object in the form of a RawMessage
 // and unmarshals the values and fills out the MarshalGuild struct.
-func (mg *MarshalGuild) Create(data jsoniter.RawMessage) (err error) {
-
-	err = json.Unmarshal(data, &mg)
+func (mg *MarshalGuild) Create(data json.RawMessage) (err error) {
+	err = jsoniter.Unmarshal(data, &mg)
 	if err != nil {
 		zlog.Error().Err(err).Msg("failed to unmarshal guild")
 		return

@@ -42,7 +42,7 @@ func shardDisconnectMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err
 func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	ready := Ready{}
-	err = json.Unmarshal(e.RawData, &ready)
+	err = jsoniter.Unmarshal(e.RawData, &ready)
 	if err != nil {
 		return
 	}
@@ -143,7 +143,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	partialGuild := UnavailableGuild{}
-	err = json.Unmarshal(e.RawData, &partialGuild)
+	err = jsoniter.Unmarshal(e.RawData, &partialGuild)
 	if err != nil {
 		m.log.Error().Err(err).Msg("Failed to unmarshal UnavailableGuild struct")
 		err = nil
@@ -222,7 +222,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err
 
 	// The GuildRoleCreate struct contains the role and guild id
 	guildRole := GuildRoleCreate{}
-	if err = json.Unmarshal(e.RawData, &guildRole); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &guildRole); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_ROLE_CREATE payload")
 		return
 	}
@@ -257,7 +257,7 @@ func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err
 
 	// The GuildRole struct contains the role and guild id
 	guildRole := GuildRoleDelete{}
-	err = json.Unmarshal(e.RawData, &guildRole)
+	err = jsoniter.Unmarshal(e.RawData, &guildRole)
 	if err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_ROLE_DELETE payload")
 		return
@@ -309,7 +309,7 @@ func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err
 func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	guildRole := GuildRoleCreate{}
-	err = json.Unmarshal(e.RawData, &guildRole)
+	err = jsoniter.Unmarshal(e.RawData, &guildRole)
 	if err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_ROLE_UPDATE payload")
 		return
@@ -347,7 +347,7 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err
 func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	guildChannel := Channel{}
-	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &guildChannel); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal guild CHANNEL_CREATE payload")
 		return
 	}
@@ -380,7 +380,7 @@ func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, 
 func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	updatedChannel := Channel{}
-	if err = json.Unmarshal(e.RawData, &updatedChannel); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &updatedChannel); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal CHANNEL_UPDATE payload")
 		return
 	}
@@ -417,7 +417,7 @@ func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, 
 func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	guildChannel := Channel{}
-	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &guildChannel); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal CHANNEL_DELETE payload")
 		return
 	}
@@ -456,7 +456,7 @@ func guildChannelDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, 
 func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	pinsPayload := ChannelPinsUpdate{}
-	if err = json.Unmarshal(e.RawData, &pinsPayload); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &pinsPayload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal CHANNEL_PINS_UPDATE payload")
 		return
 	}
@@ -483,7 +483,7 @@ func guildChannelPinsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEve
 
 func guildMemberAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	memberPayload := Member{}
-	if err = json.Unmarshal(e.RawData, &memberPayload); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &memberPayload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBER_ADD payload")
 		return
 	}
@@ -510,7 +510,7 @@ func guildMemberAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err 
 func guildMemberRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	memberPayload := Member{}
-	if err = json.Unmarshal(e.RawData, &memberPayload); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &memberPayload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBER_REMOVE payload")
 	}
 
@@ -528,7 +528,7 @@ func guildMemberRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	updatedMember := Member{}
-	if err = json.Unmarshal(e.RawData, &updatedMember); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &updatedMember); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBER_UPDATE payload")
 		return
 	}
@@ -567,7 +567,7 @@ func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 	// to consumers as it is simply for states
 
 	chunkPayload := GuildMembersChunk{}
-	if err = json.Unmarshal(e.RawData, &chunkPayload); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &chunkPayload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_MEMBERS_CHUNK payload")
 		return
 	}
@@ -609,7 +609,7 @@ func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 func guildBanAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	payload := GuildBanAdd{}
-	if err = json.Unmarshal(e.RawData, &payload); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &payload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_BAN_ADD payload")
 		return
 	}
@@ -626,7 +626,7 @@ func guildBanAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 func guildBanRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	payload := GuildBanRemove{}
-	if err = json.Unmarshal(e.RawData, &payload); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &payload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_BAN_REMOVE payload")
 		return
 	}
@@ -643,7 +643,7 @@ func guildBanRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err 
 func guildEmojisUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	payload := GuildEmojisUpdate{}
-	if err = json.Unmarshal(e.RawData, &payload); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &payload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_EMOJIS_UPDATE payload")
 		return
 	}
@@ -689,8 +689,25 @@ func guildIntegrationsUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEv
 	// What is even the point of this event...
 
 	payload := GuildIntegrationsUpdate{}
-	if err = json.Unmarshal(e.RawData, &payload); err != nil {
+	if err = jsoniter.Unmarshal(e.RawData, &payload); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_INTEGRATIONS_UPDATE payload")
+		return
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: e.Type,
+		Data: &payload,
+	}
+
+	return
+}
+
+func webhooksUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
+	payload := WebhooksUpdate{}
+	if err = jsoniter.Unmarshal(e.RawData, &payload); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal WEBHOOKS_UPDATE payload")
 		return
 	}
 
@@ -737,9 +754,7 @@ func init() {
 
 	addMarshaler("GUILD_INTEGRATIONS_UPDATE", guildIntegrationsUpdateMarshaler)
 
-	// GUILD_INTEGRATIONS_UPDATE
-
-	// WEBHOOKS_UPDATE
+	addMarshaler("WEBHOOKS_UPDATE", webhooksUpdateMarshaler)
 
 	// INVITE_CREATE
 	// INVITE_DELETE
