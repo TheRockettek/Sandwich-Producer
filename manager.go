@@ -392,12 +392,13 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 }
 
 func (m *Manager) getMember(guildID string, userID string) (me Member, err error) {
+	println("gid", guildID)
+	println("uid", userID)
 	memberData, err := m.Configuration.redisClient.HGet(
 		ctx,
 		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guildID),
 		userID,
 	).Result()
-	println(fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guildID), userID, err.Error())
 	if err != nil {
 		return
 	}
