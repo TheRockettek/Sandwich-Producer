@@ -533,6 +533,7 @@ func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 		return
 	}
 
+	updatedMember.ID = updatedMember.User.ID
 	member, err := m.getMember(updatedMember.GuildID, updatedMember.ID)
 	if err != nil {
 		m.log.Error().Err(err).Msgf("GUILD_MEMBER_UPDATE referenced unknown member %s in guild %s", updatedMember.ID, updatedMember.GuildID)
