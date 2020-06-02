@@ -387,15 +387,11 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 	}
 
 	u.Mutual = MutualGuilds{}
-	fmt.Printf("bgu: %v\n", u.Mutual.Guilds.Get())
 	err = u.FetchMutual(m)
-	fmt.Printf("agu: %v\n", u.Mutual.Guilds.Get())
 	return
 }
 
 func (m *Manager) getMember(guildID string, userID string) (me Member, err error) {
-	println("gid", guildID)
-	println("uid", userID)
 	memberData, err := m.Configuration.redisClient.HGet(
 		ctx,
 		fmt.Sprintf("%s:guild:%s:members", m.Configuration.RedisPrefix, guildID),
@@ -414,9 +410,6 @@ func (m *Manager) getMember(guildID string, userID string) (me Member, err error
 	me.User = &u
 
 	println(reflect.DeepEqual(&u, me.User))
-	fmt.Printf("getMemberU: %v\n", u.Mutual.Guilds.Get())
-	fmt.Printf("getMember: %v\n", me.User.Mutual.Guilds.Get())
-
 	return
 }
 
