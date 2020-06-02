@@ -78,6 +78,7 @@ func (ls *LockSet) Remove(_val string) (values []string, change bool) {
 		}
 	}
 
+	ls.Values = newVals
 	return ls.Values, change
 }
 
