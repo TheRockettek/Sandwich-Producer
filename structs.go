@@ -269,8 +269,7 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 		Values: u.Mutual.Guilds.Get(),
 	}
 	for _, v := range u.Mutual.Origional {
-		_, c := requests.Remove(v)
-		println(v, c)
+		requests.Remove(v)
 	}
 
 	vals = requests.Get()
