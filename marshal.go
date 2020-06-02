@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/vmihailenco/msgpack"
 )
 
 var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent, error))
@@ -14,6 +16,7 @@ var marshalers = make(map[string]func(*Manager, Event) (bool, StreamEvent, error
 
 // addMarshaler adds a marshaler for a specific event.
 func addMarshaler(event string, marshaler func(*Manager, Event) (bool, StreamEvent, error)) {
+
 	if _, ok := marshalers[event]; ok {
 		return
 	}
@@ -21,6 +24,7 @@ func addMarshaler(event string, marshaler func(*Manager, Event) (bool, StreamEve
 }
 
 func shardReadyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	ok, se.Data = true, e.Data
 	m.log.Info().Msgf("Shard %d is ready", e.Data.(struct {
 		ShardID int `msgpack:"shard_id"`
@@ -29,12 +33,14 @@ func shardReadyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err erro
 }
 
 func shardDisconnectMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	ok, se.Data = true, e.Data
 	m.log.Info().Msgf("Shard %d has disconnected with code %d", se.Data.(ShardDisconnectOp).ShardID, se.Data.(ShardDisconnectOp).StatusCode)
 	return
 }
 
 func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	ready := Ready{}
 	err = json.Unmarshal(e.RawData, &ready)
 	if err != nil {
@@ -51,6 +57,7 @@ func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 }
 
 func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	guild := MarshalGuild{}
 	err = guild.Create(e.RawData)
 	if err != nil {
@@ -134,6 +141,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 }
 
 func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	partialGuild := UnavailableGuild{}
 	err = json.Unmarshal(e.RawData, &partialGuild)
 	if err != nil {
@@ -170,6 +178,7 @@ func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 }
 
 func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	updatedGuild := MarshalGuild{}
 	err = updatedGuild.Create(e.RawData)
 	if err != nil {
@@ -210,6 +219,7 @@ func guildUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 }
 
 func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	// The GuildRoleCreate struct contains the role and guild id
 	guildRole := GuildRoleCreate{}
 	if err = json.Unmarshal(e.RawData, &guildRole); err != nil {
@@ -244,6 +254,7 @@ func guildRoleCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err
 }
 
 func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	// The GuildRole struct contains the role and guild id
 	guildRole := GuildRoleDelete{}
 	err = json.Unmarshal(e.RawData, &guildRole)
@@ -296,6 +307,7 @@ func guildRoleDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err
 }
 
 func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	guildRole := GuildRoleCreate{}
 	err = json.Unmarshal(e.RawData, &guildRole)
 	if err != nil {
@@ -333,6 +345,7 @@ func guildRoleUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err
 }
 
 func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	guildChannel := Channel{}
 	if err = json.Unmarshal(e.RawData, &guildChannel); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal guild CHANNEL_CREATE payload")
@@ -365,6 +378,7 @@ func guildChannelCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, 
 }
 
 func guildChannelUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
 	updatedChannel := Channel{}
 	if err = json.Unmarshal(e.RawData, &updatedChannel); err != nil {
 		m.log.Error().Err(err).Msg("failed to unmarshal CHANNEL_UPDATE payload")
@@ -608,7 +622,7 @@ func guildMembersChunkMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 	return
 }
 
-func guildBanAdd(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+func guildBanAddMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	payload := GuildBanAdd{}
 	if err = json.Unmarshal(e.RawData, &payload); err != nil {
@@ -619,7 +633,69 @@ func guildBanAdd(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	ok = true
 	se = StreamEvent{
 		Type: e.Type,
-		Data: payload,
+		Data: &payload,
+	}
+
+	return
+}
+
+func guildBanRemoveMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
+	payload := GuildBanRemove{}
+	if err = json.Unmarshal(e.RawData, &payload); err != nil {
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_BAN_REMOVE payload")
+		return
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: e.Type,
+		Data: &payload,
+	}
+
+	return
+}
+
+func guildEmojisUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
+	payload := GuildEmojisUpdate{}
+	if err = json.Unmarshal(e.RawData, &payload); err != err {
+		m.log.Error().Err(err).Msg("failed to unmarshal GUILD_EMOJIS_UPDATE payload")
+		return
+	}
+
+	g, err := m.getGuild(payload.GuildID)
+
+	g.Emojis = make([]string, 0)
+	guildEmojis := make(map[string]interface{})
+	for _, e := range payload.Emojis {
+		g.Emojis = append(g.Emojis, e.ID)
+		if ma, err := msgpack.Marshal(e); err == nil {
+			guildEmojis[e.ID] = ma
+		}
+	}
+
+	if len(guildEmojis) > 0 {
+		err = m.Configuration.redisClient.HSet(
+			ctx,
+			fmt.Sprintf("%s:emojis", m.Configuration.RedisPrefix),
+			guildEmojis,
+		).Err()
+	}
+
+	if ma, err := msgpack.Marshal(g); err == nil {
+		err = m.Configuration.redisClient.HSet(
+			ctx,
+			fmt.Sprintf("%s:guilds", m.Configuration.RedisPrefix),
+			g.ID,
+			ma,
+		).Err()
+	}
+
+	ok = true
+	se = StreamEvent{
+		Type: e.Type,
+		Data: &payload,
 	}
 
 	return
@@ -652,10 +728,10 @@ func init() {
 	addMarshaler("GUILD_MEMBER_UPDATE", guildMemberUpdateMarshaler)
 	addMarshaler("GUILD_MEMBERS_CHUNK", guildMembersChunkMarshaler)
 
-	// GUILD_BAN_ADD
-	// GUILD_BAN_REMOVE
+	addMarshaler("GUILD_BAN_ADD", guildBanAddMarshaler)
+	addMarshaler("GUILD_BAN_REMOVE", guildBanRemoveMarshaler)
 
-	// GUILD_EMOJIS_UPDATE
+	addMarshaler("GUILD_EMOJIS_UPDATE", guildEmojisUpdateMarshaler)
 
 	// GUILD_INTEGRATIONS_UPDATE
 
