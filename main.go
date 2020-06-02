@@ -48,6 +48,7 @@ func main() {
 			ShardCount:  1,
 			Features: features{
 				CacheMembers: true,
+				StoreMutuals: true,
 			},
 			IgnoredEvents: []string{"PRESENCE_UPDATE", "TYPING_START"},
 			redisOptions: &redis.Options{

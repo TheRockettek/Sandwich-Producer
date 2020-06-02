@@ -56,6 +56,7 @@ type Manager struct {
 // gateway can do
 type features struct {
 	CacheMembers bool `json:"cache_members"`
+	StoreMutuals bool `json:"store_mutuals"`
 	// TODO: IgnoreBots: Will ignore bots in MESSAGE_* events
 	// TODO: CheckPrefix: MESSAGE_CREATE will not pass message if message does not have the guild prefix set.
 	// TODO: StoreMutuals: Add checks to the current mutual setup
@@ -386,7 +387,9 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 	}
 
 	u.Mutual = MutualGuilds{}
-	err = u.FetchMutual(m)
+	if m.Configuration.Features.StoreMutuals {
+		err = u.FetchMutual(m)
+	}
 	return
 }
 

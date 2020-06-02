@@ -261,6 +261,7 @@ type MutualGuilds struct {
 func (u *User) AddMutual(val string) (change bool, err error) {
 	_, change = u.Mutual.Guilds.Add(val)
 	u.Mutual.Removed.Remove(val)
+
 	return
 }
 
@@ -268,6 +269,7 @@ func (u *User) AddMutual(val string) (change bool, err error) {
 func (u *User) RemoveMutual(val string) (change bool, err error) {
 	_, change = u.Mutual.Guilds.Remove(val)
 	u.Mutual.Removed.Add(val)
+
 	return
 }
 
@@ -275,10 +277,13 @@ func (u *User) RemoveMutual(val string) (change bool, err error) {
 func (u *User) SaveMutual(m *Manager) (err error) {
 	var vals []string
 
+	if !m.Configuration.Features.StoreMutuals {
+		return
+	}
+
 	// We make a lockset and remove the origional values so we can easily compare
 	// any new values that would need to be added. This is simply to prevent unnecessary
 	// SADD calls that do nothing.
-
 	requests := LockSet{
 		Values: u.Mutual.Guilds.Get(),
 	}
@@ -323,6 +328,10 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 
 // FetchMutual fills the mutual guilds set
 func (u *User) FetchMutual(m *Manager) (err error) {
+	if !m.Configuration.Features.StoreMutuals {
+		return
+	}
+
 	mutual, err := m.Configuration.redisClient.SMembers(
 		ctx,
 		fmt.Sprintf("%s:user:%s:mutual", m.Configuration.RedisPrefix, u.ID),
@@ -387,12 +396,10 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 		m.log.Error().Err(err).Msgf("error fetching user %s", me.ID)
 	}
 
-	if err != nil {
-		m.log.Error().Err(err).Msgf("error fetching mutual for user %s", me.ID)
+	if m.Configuration.Features.StoreMutuals {
+		me.User.AddMutual(me.GuildID)
+		err = me.User.SaveMutual(m)
 	}
-
-	me.User.AddMutual(me.GuildID)
-	err = me.User.SaveMutual(m)
 
 	return
 }
@@ -431,10 +438,12 @@ func (me *Member) Marshaled(updateUser bool, m *Manager) (ma []byte, err error) 
 		}
 	}
 
-	me.User.AddMutual(me.GuildID)
-	if updateUser {
-		if err = me.User.SaveMutual(m); err != nil {
-			m.log.Error().Err(err).Msg("failed to update user from redis")
+	if m.Configuration.Features.StoreMutuals {
+		me.User.AddMutual(me.GuildID)
+		if updateUser {
+			if err = me.User.SaveMutual(m); err != nil {
+				m.log.Error().Err(err).Msg("failed to update user from redis")
+			}
 		}
 	}
 
@@ -473,11 +482,16 @@ func (me *Member) Delete(m *Manager) (err error) {
 		if err != nil {
 			m.log.Error().Err(err).Msg("failed to retrieve user from redis")
 		}
-		u.RemoveMutual(me.GuildID)
-		err = u.SaveMutual(m)
+
+		if m.Configuration.Features.StoreMutuals {
+			u.RemoveMutual(me.GuildID)
+			err = u.SaveMutual(m)
+		}
 	} else {
-		me.User.RemoveMutual(me.GuildID)
-		err = me.User.SaveMutual(m)
+		if m.Configuration.Features.StoreMutuals {
+			me.User.RemoveMutual(me.GuildID)
+			err = me.User.SaveMutual(m)
+		}
 	}
 
 	return
