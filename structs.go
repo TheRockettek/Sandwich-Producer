@@ -366,8 +366,6 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 	me.User.AddMutual(me.GuildID)
 	err = me.User.SaveMutual(m)
 
-	fmt.Printf("aFrom: %v\n", me.User.Mutual.Guilds.Get())
-
 	return
 }
 
@@ -379,7 +377,9 @@ func (me *Member) FetchUser(m *Manager) (err error) {
 	if me.ID != "" {
 		u, err := m.getUser(me.ID)
 		if err != nil {
+			fmt.Printf("fub: %v\n", u.Mutual.Guilds.Get())
 			me.User = &u
+			fmt.Printf("fub: %v\n", me.User.Mutual.Guilds.Get())
 		}
 	}
 

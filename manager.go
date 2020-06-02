@@ -387,7 +387,9 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 	}
 
 	u.Mutual = MutualGuilds{}
+	fmt.Printf("bgu: %v\n", u.Mutual.Guilds.Get())
 	err = u.FetchMutual(m)
+	fmt.Printf("agu: %v\n", u.Mutual.Guilds.Get())
 	return
 }
 
