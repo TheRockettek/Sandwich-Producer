@@ -341,6 +341,8 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 	}
 
 	// We add the user
+	println("ID:", me.ID)
+
 	err = me.FetchUser(false, m)
 	if err != nil {
 		m.log.Error().Err(err).Msgf("error fetching user %s", me.ID)
@@ -371,7 +373,11 @@ func (me *Member) FetchUser(force bool, m *Manager) (err error) {
 			if err != nil {
 				me.User = &u
 			}
+		} else {
+			println("no id set")
 		}
+	} else {
+		println("no need to fetch user")
 	}
 
 	return
