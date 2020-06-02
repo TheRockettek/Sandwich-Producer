@@ -356,10 +356,6 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 	if err != nil {
 		m.log.Error().Err(err).Msgf("error fetching user %s", me.ID)
 	}
-	err = me.User.FetchMutual(m)
-	if err != nil {
-		m.log.Error().Err(err).Msgf("failed to fetch mutual for user %s", me.ID)
-	}
 
 	if err != nil {
 		m.log.Error().Err(err).Msgf("error fetching mutual for user %s", me.ID)
@@ -381,8 +377,6 @@ func (me *Member) FetchUser(m *Manager) (err error) {
 		if err != nil {
 			me.User = &u
 		}
-	} else {
-		println("ID IS EMPTY :(((((")
 	}
 
 	return
@@ -400,10 +394,6 @@ func (me *Member) Marshaled(updateUser bool, m *Manager) (ma []byte, err error) 
 		if res {
 			u, _ := m.getUser(me.ID)
 			me.User = &u
-			me.User.FetchMutual(m)
-			if err != nil {
-				m.log.Error().Err(err).Msgf("error fetching mutual for user %s", me.ID)
-			}
 		}
 	}
 
