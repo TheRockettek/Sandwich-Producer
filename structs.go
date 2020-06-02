@@ -239,8 +239,9 @@ type User struct {
 
 // MutualGuilds stores information about mutual guilds for a user
 type MutualGuilds struct {
-	Guilds  LockSet
-	Removed LockSet
+	Guilds    LockSet
+	Removed   LockSet
+	Origional []string
 }
 
 // AddMutual adds a mutual guild
@@ -261,7 +262,17 @@ func (u *User) RemoveMutual(val string) (change bool, err error) {
 func (u *User) SaveMutual(m *Manager) (err error) {
 	var vals []string
 
-	vals = u.Mutual.Guilds.Get()
+	// We make a lockset and remove the origional values so we can easily compare
+	// any new values that would need to be added. This is simply to prevent unnecessary
+	// SADD calls that do nothing.
+	requests := LockSet{
+		Values: u.Mutual.Guilds.Get(),
+	}
+	for _, v := range u.Mutual.Origional {
+		requests.Remove(v)
+	}
+
+	vals = requests.Get()
 	if len(vals) > 0 {
 		err = m.Configuration.redisClient.SAdd(
 			ctx,
@@ -308,6 +319,8 @@ func (u *User) FetchMutual(m *Manager) (err error) {
 			u.Mutual.Guilds.Add(gid)
 		}
 	}
+
+	u.Mutual.Origional = mutual
 
 	return
 }
