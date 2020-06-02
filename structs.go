@@ -266,9 +266,6 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 	// any new values that would need to be added. This is simply to prevent unnecessary
 	// SADD calls that do nothing.
 
-	fmt.Printf("origionals %v\n", u.Mutual.Origional)
-	fmt.Printf("guilds %v\n", u.Mutual.Guilds.Get())
-
 	requests := LockSet{
 		Values: u.Mutual.Guilds.Get(),
 	}
@@ -276,7 +273,7 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 		requests.Remove(v)
 	}
 
-	fmt.Printf("args %v\n", requests.Get())
+	fmt.Printf("%v - %v = %v\n", u.Mutual.Guilds.Get(), u.Mutual.Origional, requests.Get())
 
 	vals = requests.Get()
 	if len(vals) > 0 {
