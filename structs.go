@@ -265,12 +265,18 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 	// We make a lockset and remove the origional values so we can easily compare
 	// any new values that would need to be added. This is simply to prevent unnecessary
 	// SADD calls that do nothing.
+
+	fmt.Printf("origionals %v", u.Mutual.Origional)
+	fmt.Printf("guilds %v", u.Mutual.Guilds.Get())
+
 	requests := LockSet{
 		Values: u.Mutual.Guilds.Get(),
 	}
 	for _, v := range u.Mutual.Origional {
 		requests.Remove(v)
 	}
+
+	fmt.Printf("args %v", requests.Get())
 
 	vals = requests.Get()
 	if len(vals) > 0 {
@@ -431,7 +437,7 @@ func (me *Member) Marshaled(updateUser bool, m *Manager) (ma []byte, err error) 
 
 // Save saves the Member into redis
 func (me *Member) Save(m *Manager) (err error) {
-	ma, err := me.Marshaled(true, m)
+	ma, err := me.Marshaled(false, m)
 	if err != nil {
 		m.log.Error().Err(err).Msg("failed to marshal user")
 	}
