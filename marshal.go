@@ -540,7 +540,23 @@ func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 		return
 	}
 
-	println("GMUM UI", member.UserIncluded)
+	// If the member we get includes a user, inherit the mutual guilds. We could just
+	// directly copy the entire user object but incase the user object changes for some
+	// reason we might aswell use the most recent version. We can't directly reference
+	// the Mutual attribute of the origional member as it has a mutex which cannot be
+	// cloned so we play it safe and make a completely new object.
+	if member.UserIncluded {
+		updatedMember.UserIncluded = true
+		updatedMember.User.Mutual = MutualGuilds{
+			Guilds: LockSet{
+				Values: member.User.Mutual.Guilds.Values,
+			},
+			Removed: LockSet{
+				Values: member.User.Mutual.Removed.Values,
+			},
+		}
+	}
+
 	if err = updatedMember.Save(m); err != nil {
 		m.log.Error().Err(err).Msg("failed to update member")
 	}

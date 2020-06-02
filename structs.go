@@ -390,7 +390,6 @@ func (me *Member) FetchUser(m *Manager) (err error) {
 func (me *Member) Marshaled(updateUser bool, m *Manager) (ma []byte, err error) {
 	me.ID = me.User.ID
 
-	println("Marshaled UI", me.UserIncluded)
 	if !me.UserIncluded {
 		if res, err := m.Configuration.redisClient.HExists(
 			ctx,
