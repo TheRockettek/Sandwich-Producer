@@ -367,17 +367,13 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 // in the member struct is already filled out.
 func (me *Member) FetchUser(force bool, m *Manager) (err error) {
 
-	if force || me.User == &(User{}) {
-		if me.ID != "" {
-			u, err := m.getUser(me.ID)
-			if err != nil {
-				me.User = &u
-			}
-		} else {
-			println("no id set")
+	if me.ID != "" {
+		u, err := m.getUser(me.ID)
+		if err != nil {
+			me.User = &u
 		}
 	} else {
-		println("no need to fetch user")
+		println("no id set")
 	}
 
 	return
