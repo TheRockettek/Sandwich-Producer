@@ -386,8 +386,11 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 	}
 
 	u.Mutual = MutualGuilds{}
+	fmt.Printf("bgetUser: %v\n", u.Mutual.Guilds.Get())
+
 	err = u.FetchMutual(m)
 
+	fmt.Printf("agetUser: %v\n", u.Mutual.Guilds.Get())
 	return
 }
 
@@ -410,6 +413,8 @@ func (m *Manager) getMember(guildID string, userID string) (me Member, err error
 
 	u, err := m.getUser(userID)
 	me.User = &u
+
+	fmt.Printf("getMember: %v\n", me.User.Mutual.Guilds.Get())
 
 	return
 }

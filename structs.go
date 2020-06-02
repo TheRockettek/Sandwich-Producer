@@ -361,8 +361,12 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 		m.log.Error().Err(err).Msgf("error fetching mutual for user %s", me.ID)
 	}
 
+	fmt.Printf("dFrom: %v\n", me.User.Mutual.Guilds.Get())
+
 	me.User.AddMutual(me.GuildID)
 	err = me.User.SaveMutual(m)
+
+	fmt.Printf("aFrom: %v\n", me.User.Mutual.Guilds.Get())
 
 	return
 }
