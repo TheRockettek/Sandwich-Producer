@@ -33,6 +33,7 @@ func init() {
 
 	for _, v := range []string{"1", "2", "3", "4"} {
 		requests.Remove(v)
+		fmt.Printf("%v %s\n", requests.Get(), v)
 	}
 
 	fmt.Printf("%v\n", requests.Get())
