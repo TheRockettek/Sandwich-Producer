@@ -273,6 +273,7 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 	for _, v := range u.Mutual.Origional {
 		requests.Remove(v)
 	}
+	fmt.Printf("vals: %v\n", requests.Values)
 
 	vals = requests.Get()
 	if len(vals) > 0 {
