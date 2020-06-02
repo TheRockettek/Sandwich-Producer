@@ -540,6 +540,7 @@ func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 		return
 	}
 
+	println("GMUM UI", member.UserIncluded)
 	if err = updatedMember.Save(m); err != nil {
 		m.log.Error().Err(err).Msg("failed to update member")
 	}

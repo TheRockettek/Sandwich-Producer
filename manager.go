@@ -405,6 +405,8 @@ func (m *Manager) getMember(guildID string, userID string) (me Member, err error
 		return
 	}
 
+	println("GMB UI", me.UserIncluded)
+
 	if !me.UserIncluded {
 		u, err := m.getUser(userID)
 		if err != nil {
@@ -414,6 +416,8 @@ func (m *Manager) getMember(guildID string, userID string) (me Member, err error
 		me.User = &u
 		me.UserIncluded = true
 	}
+
+	println("GMA UI", me.UserIncluded)
 
 	return
 }
