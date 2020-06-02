@@ -268,6 +268,8 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 	requests := LockSet{
 		Values: u.Mutual.Guilds.Get(),
 	}
+	fmt.Printf("orig: %v\n", u.Mutual.Origional)
+	fmt.Printf("mutu: %v\n", requests.Values)
 	for _, v := range u.Mutual.Origional {
 		requests.Remove(v)
 	}
