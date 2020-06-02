@@ -380,7 +380,11 @@ func (me *Member) FetchUser(m *Manager) (err error) {
 			fmt.Printf("fub: %v\n", u.Mutual.Guilds.Get())
 			me.User = &u
 			fmt.Printf("fub: %v\n", me.User.Mutual.Guilds.Get())
+		} else {
+			println("error", err.Error())
 		}
+	} else {
+		println("no id")
 	}
 
 	return
