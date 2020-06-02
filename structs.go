@@ -352,7 +352,7 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 		return
 	}
 
-	err = me.FetchUser(false, m)
+	err = me.FetchUser(m)
 	if err != nil {
 		m.log.Error().Err(err).Msgf("error fetching user %s", me.ID)
 	}
@@ -374,13 +374,15 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 // FetchUser will attempt to get the user object for the member.
 // If force is true, it will get the user reguardless if the user
 // in the member struct is already filled out.
-func (me *Member) FetchUser(force bool, m *Manager) (err error) {
+func (me *Member) FetchUser(m *Manager) (err error) {
 
 	if me.ID != "" {
 		u, err := m.getUser(me.ID)
 		if err != nil {
 			me.User = &u
 		}
+	} else {
+		println("ID IS EMPTY :(((((")
 	}
 
 	return
