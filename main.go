@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -26,18 +25,6 @@ var ctx = context.Background()
 
 func init() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-
-	requests := LockSet{
-		Values: []string{"1", "2"},
-	}
-
-	for _, v := range []string{"1", "2", "3", "4"} {
-		requests.Remove(v)
-		fmt.Printf("%v %s\n", requests.Get(), v)
-	}
-
-	fmt.Printf("%v\n", requests.Get())
-	panic("A")
 }
 
 func main() {
