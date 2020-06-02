@@ -257,7 +257,7 @@ func (u *User) RemoveMutual(val string) (change bool, err error) {
 	return
 }
 
-// SaveMutual saves the User into redis
+// SaveMutual saves the User mutual and the User into redis
 func (u *User) SaveMutual(m *Manager) (err error) {
 	var vals []string
 
@@ -280,6 +280,18 @@ func (u *User) SaveMutual(m *Manager) (err error) {
 	}
 
 	u.Mutual.Removed.Values = make([]string, 0)
+
+	ma, err := msgpack.Marshal(u)
+	if err != nil {
+		m.log.Error().Err(err).Msg("failed to marshal user")
+	}
+
+	err = m.Configuration.redisClient.HSet(
+		ctx,
+		fmt.Sprintf("%s:user", m.Configuration.RedisPrefix),
+		u.ID,
+		ma,
+	).Err()
 
 	return
 }
