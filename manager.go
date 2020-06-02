@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -386,11 +387,7 @@ func (m *Manager) getUser(userID string) (u User, err error) {
 	}
 
 	u.Mutual = MutualGuilds{}
-	fmt.Printf("bgetUser: %v\n", u.Mutual.Guilds.Get())
-
 	err = u.FetchMutual(m)
-
-	fmt.Printf("agetUser: %v\n", u.Mutual.Guilds.Get())
 	return
 }
 
@@ -414,6 +411,8 @@ func (m *Manager) getMember(guildID string, userID string) (me Member, err error
 	u, err := m.getUser(userID)
 	me.User = &u
 
+	println(reflect.DeepEqual(&u, me.User))
+	fmt.Printf("getMemberU: %v\n", u.Mutual.Guilds.Get())
 	fmt.Printf("getMember: %v\n", me.User.Mutual.Guilds.Get())
 
 	return
