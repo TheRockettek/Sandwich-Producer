@@ -5,7 +5,9 @@ import (
 	"flag"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -62,32 +64,21 @@ func main() {
 		},
 	)
 
-	ug := UnavailableGuild{
-		ID: "",
-	}
-	err = ug.Delete(m)
-
+	err = m.ClearCache()
 	if err != nil {
-		panic(err.Error())
-	} else {
-		panic("fine")
+		zlog.Panic().Err(err).Msg("Could not clear cache")
 	}
 
-	// err = m.ClearCache()
-	// if err != nil {
-	// 	zlog.Panic().Err(err).Msg("Could not clear cache")
-	// }
+	err = m.Open()
+	if err != nil {
+		zlog.Panic().Err(err).Msg("Cold not start manager")
+	}
 
-	// err = m.Open()
-	// if err != nil {
-	// 	zlog.Panic().Err(err).Msg("Cold not start manager")
-	// }
+	zlog.Info().Msg("Sessions have now started. Do ^C to close sessions")
 
-	// zlog.Info().Msg("Sessions have now started. Do ^C to close sessions")
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	<-sc
 
-	// sc := make(chan os.Signal, 1)
-	// signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-	// <-sc
-
-	// m.Close()
+	m.Close()
 }
