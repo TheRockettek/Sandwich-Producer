@@ -345,7 +345,11 @@ func (me *Member) From(data []byte, m *Manager) (err error) {
 	if err != nil {
 		m.log.Error().Err(err).Msgf("error fetching user %s", me.ID)
 	}
-	me.User.FetchMutual(m)
+	err = me.User.FetchMutual(m)
+	if err != nil {
+		m.log.Error().Err(err).Msgf("failed to fetch mutual for user %s", me.ID)
+	}
+
 	if err != nil {
 		m.log.Error().Err(err).Msgf("error fetching mutual for user %s", me.ID)
 	}
