@@ -321,6 +321,7 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 		case <-listening:
 			return
 		default:
+			println(messageType)
 			s.rawEventChannel <- RawEvent{
 				messageType, message,
 			}
@@ -487,6 +488,7 @@ func (s *Session) eventListener(listening <-chan interface{}) {
 	for m := range s.rawEventChannel {
 		message := m.message
 		messageType := m.messageType
+		println(messageType)
 
 		reader = bytes.NewBuffer(message)
 
