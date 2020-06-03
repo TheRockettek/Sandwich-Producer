@@ -292,9 +292,7 @@ func (s *Session) Open() error {
 
 	// Start sending heartbeats and reading messages from Discord.
 	go s.heartbeat(s.listening, h.HeartbeatInterval)
-	for range make([]int, s.MaxListenConcurrency) {
-		go s.listen(s.wsConn, s.listening)
-	}
+	go s.listen(s.wsConn, s.listening)
 	return nil
 }
 
@@ -302,9 +300,7 @@ func (s *Session) Open() error {
 // listening channel is closed, or an error occurs.
 func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 	for {
-		s.wsReadMu.Lock()
 		messageType, message, err := wsConn.ReadMessage()
-		s.wsReadMu.Unlock()
 		if err != nil {
 			// Detect if we have been closed manually. If a Close() has already
 			// happened, the websocket we are listening on will be different to
@@ -482,7 +478,6 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 
 	// Store the message sequence
 	atomic.StoreInt64(s.sequence, e.Sequence)
-
 	s.eventChannel <- *e
 
 	return e, nil

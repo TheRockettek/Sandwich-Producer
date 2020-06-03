@@ -89,6 +89,8 @@ func main() {
 				Name: "welcomer.gg | +help",
 			},
 		},
+		1,
+		0,
 	)
 
 	err = m.ClearCache()

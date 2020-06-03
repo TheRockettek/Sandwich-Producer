@@ -44,12 +44,17 @@ type Manager struct {
 	// Stores
 	GatewayResponse *GatewayBotResponse
 	ShardCount      int
+	Shards          []int
 
 	// List of unavailable guilds from READY events
 	Unavailables map[string]bool
 
 	// Presence that each session will be given
 	Presence UpdateStatusData
+
+	// Oops! All clusters
+	ClusterCount int
+	ClusterID    int
 }
 
 // features defines different settings for specific things that the
@@ -99,7 +104,9 @@ type managerConfiguration struct {
 }
 
 // NewManager creates all the shards and shenanigans
-func NewManager(token string, identity string, configuration managerConfiguration, log zerolog.Logger, presence UpdateStatusData) (m *Manager) {
+func NewManager(token string, identity string,
+	configuration managerConfiguration, log zerolog.Logger,
+	presence UpdateStatusData, clusterCount int, clusterID int) (m *Manager) {
 	m = &Manager{
 		Token:          token,
 		Identity:       identity,
@@ -111,6 +118,8 @@ func NewManager(token string, identity string, configuration managerConfiguratio
 		Unavailables:   make(map[string]bool),
 		log:            log,
 		Presence:       presence,
+		ClusterID:      clusterID,
+		ClusterCount:   clusterCount,
 	}
 	m.Configuration.redisClient = redis.NewClient(configuration.redisOptions)
 
@@ -196,7 +205,12 @@ func (m *Manager) Open() (err error) {
 	go m.ForwardEvents()
 	go m.ForwardProduce()
 
-	for shardID := clusternumber; shardID < m.ShardCount; shardID += clusters {
+	deployedShards := m.ShardCount / m.ClusterCount
+	for i := (deployedShards * m.ClusterID); i < (deployedShards * (m.ClusterID + 1)); i++ {
+		m.Shards = append(m.Shards, i)
+	}
+
+	for shardID := range m.Shards {
 		m.log.Info().Int("shard", shardID).Msg("starting session")
 		session := NewSession(m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
 		session.Presence = m.Presence
@@ -317,7 +331,7 @@ func (m *Manager) ForwardProduce() {
 		m.log.Panic().Err(err).Send()
 	}
 	m.Configuration.stanClient, err = stan.Connect(m.Configuration.ClusterID,
-		m.Configuration.ClientID, stan.NatsConn(m.Configuration.natsClient))
+		m.Configuration.ClientID+"-"+string(m.ClusterID), stan.NatsConn(m.Configuration.natsClient))
 	if err != nil {
 		m.log.Panic().Err(err).Send()
 	}
