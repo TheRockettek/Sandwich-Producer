@@ -32,7 +32,6 @@ func init() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 }
 
-var clusternumber = 1
 var clusters = 1
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
@@ -42,7 +41,6 @@ func main() {
 	var err error
 	token := flag.String("token", "", "token the bot will use to authenticate")
 	shardCount := flag.Int("shards", 1, "shard count to use")
-	clusternumber = *flag.Int("cluster", 0, "initial shard to use")
 	clusters = *flag.Int("clusters", 1, "how many clusters are running")
 	flag.Parse()
 
@@ -65,7 +63,7 @@ func main() {
 	clusterCount := 16
 
 	managers := make([]*Manager, 0)
-	for i := 1; i < clusterCount; i++ {
+	for i := 1; i < clusters; i++ {
 		m := NewManager(
 			*token,
 			"welcomer",
