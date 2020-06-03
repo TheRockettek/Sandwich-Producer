@@ -60,10 +60,10 @@ func main() {
 	redisPassword := strings.TrimSpace(string(pass))
 	zlog.Info().Msgf("using redis password: '%s'", redisPassword)
 
-	clusterCount := 16
-
+	println("Using", clusters, "cluster(s)")
 	managers := make([]*Manager, 0)
-	for i := 1; i < clusters; i++ {
+	for i := 0; i < clusters; i++ {
+		println("Make cluster", i)
 		m := NewManager(
 			*token,
 			"welcomer",
@@ -91,7 +91,7 @@ func main() {
 					Name: "welcomer.gg | +help",
 				},
 			},
-			clusterCount,
+			clusters,
 			i,
 		)
 
