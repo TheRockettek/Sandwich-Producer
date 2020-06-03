@@ -144,6 +144,7 @@ func NewSession(token string, shardid int, shardcount int, eventChannel chan Eve
 		LastHeartbeatAck:       time.Now().UTC(),
 		Token:                  token,
 		eventChannel:           eventChannel,
+		rawEventChannel:        make(chan RawEvent),
 		gateway:                gateway,
 		log:                    log,
 	}
