@@ -41,6 +41,12 @@ type LockSet struct {
 	Values []string `json:"values" msgpack:"values"`
 }
 
+// Counter allows for a concurrent supportive iterator
+type Counter struct {
+	sync.RWMutex
+	Value int
+}
+
 // Contains returns a boolean if the set contains a specific value
 func (ls *LockSet) Contains(_val string) (contains bool) {
 	ls.RLock()
@@ -101,4 +107,27 @@ func (ls *LockSet) Add(_val string) (values []string, change bool) {
 	}
 
 	return ls.Values, change
+}
+
+// Get gets the value from counter
+func (co *Counter) Get() int {
+	co.RLock()
+	defer co.RUnlock()
+	return co.Value
+}
+
+// Add adds a number onto the counter
+func (co *Counter) Add(count int) int {
+	co.Lock()
+	defer co.Unlock()
+	co.Value += count
+	return co.Value
+}
+
+// Remove removes  number from the counter
+func (co *Counter) Remove(count int) int {
+	co.Lock()
+	defer co.Unlock()
+	co.Value -= count
+	return co.Value
 }

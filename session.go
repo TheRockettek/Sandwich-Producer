@@ -124,6 +124,9 @@ type Session struct {
 
 	// channel that is shared with all shards to pipe to manager
 	eventChannel chan Event
+
+	// Counter for active goroutines
+	ActiveRoutines Counter
 }
 
 // NewSession creates a new session from a token, shardid and shardcount
@@ -385,6 +388,9 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	var reader io.Reader
 	reader = bytes.NewBuffer(message)
 
+	s.ActiveRoutines.Add(1)
+	defer s.ActiveRoutines.Remove(1)
+
 	// If this is a compressed message, uncompress it.
 	if messageType == websocket.BinaryMessage {
 
@@ -476,7 +482,7 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	// Store the message sequence
 	atomic.StoreInt64(s.sequence, e.Sequence)
 
-	s.dispatch(e.Type, e)
+	s.eventChannel <- *e
 
 	return e, nil
 }
