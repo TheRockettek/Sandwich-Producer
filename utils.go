@@ -131,3 +131,35 @@ func (co *Counter) Remove(count int) int {
 	co.Value -= count
 	return co.Value
 }
+
+const (
+	// DefaultLimit is the default concurrency limit
+	DefaultLimit = 100
+)
+
+// ConcurrencyLimiter object
+type ConcurrencyLimiter struct {
+	limit         int
+	tickets       chan int
+	numInProgress int32
+}
+
+// NewConcurrencyLimiter allocates a new ConcurrencyLimiter
+func NewConcurrencyLimiter(limit int) *ConcurrencyLimiter {
+	if limit <= 0 {
+		limit = DefaultLimit
+	}
+
+	// allocate a limiter instance
+	c := &ConcurrencyLimiter{
+		limit:   limit,
+		tickets: make(chan int, limit),
+	}
+
+	// allocate the tickets:
+	for i := 0; i < c.limit; i++ {
+		c.tickets <- i
+	}
+
+	return c
+}

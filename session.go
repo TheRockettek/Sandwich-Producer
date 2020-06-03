@@ -327,7 +327,6 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 			s.rawEventChannel <- RawEvent{
 				messageType, message,
 			}
-			// s.onEvent(messageType, message)
 		}
 	}
 }
@@ -387,9 +386,6 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	var err error
 	var reader io.Reader
 	reader = bytes.NewBuffer(message)
-
-	s.ActiveRoutines.Add(1)
-	defer s.ActiveRoutines.Remove(1)
 
 	// If this is a compressed message, uncompress it.
 	if messageType == websocket.BinaryMessage {
@@ -488,12 +484,24 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 }
 
 func (s *Session) eventListener(listening <-chan interface{}) {
+	limiter := NewConcurrencyLimiter(5)
 	for m := range s.rawEventChannel {
+		size := len(s.rawEventChannel)
+		if size > 100 {
+			fmt.Printf("%d's channel size is %d", s.ShardID, size)
+		}
+
 		select {
 		case <-listening:
 			return
 		default:
-			s.onEvent(m.messageType, m.message)
+			ticket := <-limiter.tickets
+			go func() {
+				defer func() {
+					limiter.tickets <- ticket
+				}()
+				s.onEvent(m.messageType, m.message)
+			}()
 		}
 	}
 }
