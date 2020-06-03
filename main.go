@@ -93,17 +93,17 @@ func main() {
 			i,
 		)
 
-		if i == 1 {
+		managers = append(managers, m)
+	}
+
+	for i, m := range managers {
+		if i == 0 {
 			err = m.ClearCache()
 			if err != nil {
 				zlog.Panic().Err(err).Msg("Could not clear cache")
 			}
 		}
 
-		managers = append(managers, m)
-	}
-
-	for _, m := range managers {
 		err = m.Open()
 		if err != nil {
 			zlog.Panic().Err(err).Msg("Cold not start manager")
