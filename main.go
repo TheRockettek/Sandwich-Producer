@@ -32,8 +32,6 @@ func init() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 }
 
-var clusters = 1
-
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 
@@ -41,7 +39,7 @@ func main() {
 	var err error
 	token := flag.String("token", "", "token the bot will use to authenticate")
 	shardCount := flag.Int("shards", 1, "shard count to use")
-	clusters = *flag.Int("clusters", 1, "how many clusters are running")
+	clusters := *flag.Int("clusters", 1, "how many clusters are running")
 	flag.Parse()
 
 	if *cpuprofile != "" {
