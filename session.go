@@ -527,6 +527,7 @@ func (s *Session) eventListener(listening <-chan interface{}) {
 			if err != nil {
 				s.log.Error().Msg("error sending heartbeat in response to Op1")
 			}
+			continue
 		}
 
 		// Reconnect
@@ -535,6 +536,7 @@ func (s *Session) eventListener(listening <-chan interface{}) {
 			s.log.Debug().Msg("Closing and reconnecting in response to Op7")
 			s.CloseWithStatus(4000)
 			s.reconnect()
+			continue
 		}
 
 		// Invalid Session
@@ -547,6 +549,7 @@ func (s *Session) eventListener(listening <-chan interface{}) {
 			if err != nil {
 				s.log.Warn().Err(err).Str("gateway", s.gateway).Msg("error sending gateway identify packet")
 			}
+			continue
 		}
 
 		if e.Operation == 11 {
@@ -554,6 +557,7 @@ func (s *Session) eventListener(listening <-chan interface{}) {
 			s.LastHeartbeatAck = time.Now().UTC()
 			s.log.Trace().Int("shard", s.ShardID).Time("time", s.LastHeartbeatAck).Msg("received heartbeat")
 			s.Unlock()
+			continue
 		}
 
 		// Do not try to Dispatch a non-Dispatch Message
