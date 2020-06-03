@@ -196,7 +196,7 @@ func (m *Manager) Open() (err error) {
 	go m.ForwardEvents()
 	go m.ForwardProduce()
 
-	for shardID := 0; shardID < m.ShardCount; shardID++ {
+	for shardID := clusternumber; shardID < m.ShardCount; shardID += clusters {
 		m.log.Info().Int("shard", shardID).Msg("starting session")
 		session := NewSession(m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
 		session.Presence = m.Presence

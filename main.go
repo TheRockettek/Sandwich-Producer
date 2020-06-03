@@ -27,9 +27,15 @@ func init() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 }
 
+var clusternumber = 1
+var clusters = 1
+
 func main() {
 	var err error
 	token := flag.String("token", "", "token the bot will use to authenticate")
+	shardCount := flag.Int("shards", 1, "shard count to use")
+	clusternumber = *flag.Int("cluster", 0, "initial shard to use")
+	clusters = *flag.Int("clusters", 1, "how many clusters are running")
 	flag.Parse()
 
 	pass, err := ioutil.ReadFile("REDIS_PASSWORD")
@@ -45,7 +51,7 @@ func main() {
 			ClientID:    "welcomer",
 			ClusterID:   "cluster",
 			RedisPrefix: "welcomer",
-			ShardCount:  1,
+			ShardCount:  *shardCount,
 			Features: features{
 				CacheMembers: true,
 				StoreMutuals: true,
