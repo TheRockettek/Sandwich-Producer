@@ -39,7 +39,7 @@ func main() {
 	var err error
 	token := flag.String("token", "", "token the bot will use to authenticate")
 	shardCount := flag.Int("shards", 1, "shard count to use")
-	clusters := *flag.Int("clusters", 1, "how many clusters are running")
+	clusters := flag.Int("clusters", 1, "how many clusters are running")
 	flag.Parse()
 
 	if *cpuprofile != "" {
@@ -60,7 +60,7 @@ func main() {
 
 	println("Using", clusters, "cluster(s)")
 	managers := make([]*Manager, 0)
-	for i := 0; i < clusters; i++ {
+	for i := 0; i < *clusters; i++ {
 		println("Make cluster", i)
 		m := NewManager(
 			*token,
@@ -89,7 +89,7 @@ func main() {
 					Name: "welcomer.gg | +help",
 				},
 			},
-			clusters,
+			*clusters,
 			i,
 		)
 
