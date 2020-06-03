@@ -296,6 +296,9 @@ func (s *Session) Open() error {
 // listen polls the websocket connection for events, it will stop when the
 // listening channel is closed, or an error occurs.
 func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
+	var _messageType int
+	var _message []byte
+
 	for {
 		messageType, message, err := wsConn.ReadMessage()
 		if err != nil {
@@ -324,8 +327,11 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 		case <-listening:
 			return
 		default:
+			copy(message, _message)
+			_messageType = messageType
+
 			s.rawEventChannel <- RawEvent{
-				messageType, message,
+				_messageType, _message,
 			}
 		}
 	}
