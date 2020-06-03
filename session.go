@@ -98,6 +98,9 @@ type Session struct {
 	// When nil, the session is not listening.
 	listening chan interface{}
 
+	// Event listener handles events from sessions
+	rawEventChannel chan RawEvent
+
 	// sequence tracks the current gateway api websocket sequence number
 	sequence *int64
 
@@ -282,6 +285,7 @@ func (s *Session) Open() error {
 	// Start sending heartbeats and reading messages from Discord.
 	go s.heartbeat(s.listening, h.HeartbeatInterval)
 	go s.listen(s.wsConn, s.listening)
+	go s.eventListener(s.listening)
 	return nil
 }
 
@@ -316,7 +320,9 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 		case <-listening:
 			return
 		default:
-			s.onEvent(messageType, message)
+			s.rawEventChannel <- RawEvent{
+				messageType, message,
+			}
 		}
 	}
 }
@@ -471,6 +477,99 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	s.dispatch(e.Type, e)
 
 	return e, nil
+}
+
+func (s *Session) eventListener(listening <-chan interface{}) {
+	var err error
+	var reader io.Reader
+
+	for m := range s.rawEventChannel {
+		message := m.message
+		messageType := m.messageType
+
+		reader = bytes.NewBuffer(message)
+
+		// If this is a compressed message, uncompress it.
+		if messageType == websocket.BinaryMessage {
+
+			z, err2 := zlib.NewReader(reader)
+			if err2 != nil {
+				s.log.Error().Err(err).Msg("error uncompressing websocket message")
+			}
+
+			defer func() {
+				err3 := z.Close()
+				if err3 != nil {
+					s.log.Warn().Err(err).Msg("error closing zlib")
+				}
+			}()
+
+			reader = z
+		}
+
+		// Decode the event into an Event struct.
+		var e *Event
+		decoder := jsoniter.NewDecoder(reader)
+		if err = decoder.Decode(&e); err != nil {
+			s.log.Error().Err(err).Msg("error decoding websocket message")
+		}
+
+		// Ping request.
+		// Must respond with a heartbeat packet within 5 seconds
+		if e.Operation == 1 {
+			s.log.Debug().Msg("sending heartbeat in response to Op1")
+			s.wsMutex.Lock()
+			err = s.wsConn.WriteJSON(Heartbeat{1, atomic.LoadInt64(s.sequence)})
+			s.wsMutex.Unlock()
+			if err != nil {
+				s.log.Error().Msg("error sending heartbeat in response to Op1")
+			}
+		}
+
+		// Reconnect
+		// Must immediately disconnect from gateway and reconnect to new gateway.
+		if e.Operation == 7 {
+			s.log.Debug().Msg("Closing and reconnecting in response to Op7")
+			s.CloseWithStatus(4000)
+			s.reconnect()
+		}
+
+		// Invalid Session
+		// Must respond with a Identify packet.
+		if e.Operation == 9 {
+
+			s.log.Debug().Msg("sending identify packet to gateway in response to Op9")
+
+			err = s.identify()
+			if err != nil {
+				s.log.Warn().Err(err).Str("gateway", s.gateway).Msg("error sending gateway identify packet")
+			}
+		}
+
+		if e.Operation == 11 {
+			s.Lock()
+			s.LastHeartbeatAck = time.Now().UTC()
+			s.log.Trace().Int("shard", s.ShardID).Time("time", s.LastHeartbeatAck).Msg("received heartbeat")
+			s.Unlock()
+		}
+
+		// Do not try to Dispatch a non-Dispatch Message
+		if e.Operation != 0 {
+			// But we probably should be doing something with them.
+			// TEMP
+			s.log.Warn().Int("op", e.Operation).Int64("seq", e.Sequence).Str("type", e.Type).Str("data", string(e.RawData)).Str("message", string(message)).Msg("unknown")
+		}
+
+		// Store the message sequence
+		atomic.StoreInt64(s.sequence, e.Sequence)
+
+		select {
+		case <-listening:
+			return
+		default:
+			s.dispatch(e.Type, e)
+		}
+	}
 }
 
 // identify sends the identify packet to the gateway

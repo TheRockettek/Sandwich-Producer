@@ -152,6 +152,12 @@ type ShardDisconnectOp struct {
 	StatusCode int `msgpack:"status"`
 }
 
+// RawEvent stores the websocket data that is read from the dateway
+type RawEvent struct {
+	messageType int
+	message     []byte
+}
+
 // RequestGuildMembersData contains the data that is sent during a
 // REQUEST_GUILD_MEMBERS payload.
 type RequestGuildMembersData struct {
