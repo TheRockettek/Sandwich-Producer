@@ -4,8 +4,11 @@ import (
 	"context"
 	"flag"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"syscall"
 	"time"
@@ -32,6 +35,9 @@ func init() {
 var clusternumber = 1
 var clusters = 1
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+
 func main() {
 	var err error
 	token := flag.String("token", "", "token the bot will use to authenticate")
@@ -39,6 +45,18 @@ func main() {
 	clusternumber = *flag.Int("cluster", 0, "initial shard to use")
 	clusters = *flag.Int("clusters", 1, "how many clusters are running")
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
 
 	pass, err := ioutil.ReadFile("REDIS_PASSWORD")
 	redisPassword := strings.TrimSpace(string(pass))
@@ -90,4 +108,16 @@ func main() {
 	<-sc
 
 	m.Close()
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		runtime.GC()    // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
+	}
 }
