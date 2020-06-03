@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/go-redis/redis/v8"
 	jsoniterator "github.com/json-iterator/go"
 	"github.com/rs/zerolog"
