@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -331,7 +332,7 @@ func (m *Manager) ForwardProduce() {
 		m.log.Panic().Err(err).Send()
 	}
 	m.Configuration.stanClient, err = stan.Connect(m.Configuration.ClusterID,
-		m.Configuration.ClientID+"-"+string(m.ClusterID), stan.NatsConn(m.Configuration.natsClient))
+		m.Configuration.ClientID+"-"+strconv.Itoa(m.ClusterID), stan.NatsConn(m.Configuration.natsClient))
 	if err != nil {
 		m.log.Panic().Err(err).Send()
 	}
