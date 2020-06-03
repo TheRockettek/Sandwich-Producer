@@ -126,7 +126,10 @@ type Session struct {
 	eventChannel chan Event
 
 	// Counter for active goroutines
-	ActiveRoutines Counter
+	wsReadMu sync.Mutex
+
+	// Number of concurrent websocket readers
+	MaxListenConcurrency int
 }
 
 // NewSession creates a new session from a token, shardid and shardcount
@@ -150,6 +153,7 @@ func NewSession(token string, shardid int, shardcount int, eventChannel chan Eve
 		rawEventChannel:        make(chan RawEvent),
 		gateway:                gateway,
 		log:                    log,
+		MaxListenConcurrency:   4,
 	}
 
 	return
@@ -288,8 +292,9 @@ func (s *Session) Open() error {
 
 	// Start sending heartbeats and reading messages from Discord.
 	go s.heartbeat(s.listening, h.HeartbeatInterval)
-	go s.listen(s.wsConn, s.listening)
-	go s.eventListener(s.listening)
+	for range make([]int, s.MaxListenConcurrency) {
+		go s.listen(s.wsConn, s.listening)
+	}
 	return nil
 }
 
@@ -297,7 +302,9 @@ func (s *Session) Open() error {
 // listening channel is closed, or an error occurs.
 func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 	for {
+		s.wsReadMu.Lock()
 		messageType, message, err := wsConn.ReadMessage()
+		s.wsReadMu.Unlock()
 		if err != nil {
 			// Detect if we have been closed manually. If a Close() has already
 			// happened, the websocket we are listening on will be different to
@@ -324,9 +331,7 @@ func (s *Session) listen(wsConn *websocket.Conn, listening <-chan interface{}) {
 		case <-listening:
 			return
 		default:
-			s.rawEventChannel <- RawEvent{
-				messageType, message,
-			}
+			s.onEvent(messageType, message)
 		}
 	}
 }
@@ -481,29 +486,6 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	s.eventChannel <- *e
 
 	return e, nil
-}
-
-func (s *Session) eventListener(listening <-chan interface{}) {
-	limiter := NewConcurrencyLimiter(5)
-	for m := range s.rawEventChannel {
-		size := len(s.rawEventChannel)
-		if size > 100 {
-			fmt.Printf("%d's channel size is %d", s.ShardID, size)
-		}
-
-		select {
-		case <-listening:
-			return
-		default:
-			ticket := <-limiter.tickets
-			go func() {
-				defer func() {
-					limiter.tickets <- ticket
-				}()
-				s.onEvent(m.messageType, m.message)
-			}()
-		}
-	}
 }
 
 // identify sends the identify packet to the gateway
