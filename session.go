@@ -170,13 +170,13 @@ func (s *Session) Open() error {
 
 	// Get the gateway to use for the Websocket connection
 	if s.gateway == "" {
-		s.log.Error().Err(ErrGatewayNotFound).Msg("error starting session")
+		s.log.Error().Err(ErrGatewayNotFound).Msg("Error starting session")
 		s.wsConn = nil // remove ws just incase.
 		return ErrGatewayNotFound
 	}
 
 	// Connect to the Gateway
-	s.log.Info().Str("gateway", s.gateway).Msg("connecting to gateway")
+	s.log.Info().Str("gateway", s.gateway).Msg("Connecting to gateway")
 
 	header := http.Header{}
 	header.Add("accept-encoding", "zlib")
@@ -666,13 +666,13 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 		ok, data, err = ma(s.Manager, e)
 		_duration := time.Now().Sub(_start)
 		if _duration.Milliseconds() > 20 {
-			s.log.Warn().Dur("time", _duration).Int64("ms", _duration.Milliseconds()).Msg("marshaler took a while to process event")
+			s.log.Warn().Msgf("Marshaler took %d ms to process %s", _duration.Milliseconds(), e.Type)
 		}
 		if ok {
 			se = data
 		}
 	} else {
-		s.log.Warn().Str("type", e.Type).Msg("no available marshaler")
+		s.log.Warn().Str("type", e.Type).Msg("No available marshaler")
 	}
 
 	if !ok || belongsToList(s.Manager.Configuration.ProducerBlacklist, e.Type) {
@@ -691,12 +691,12 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 
 	ep, err := msgpack.Marshal(se)
 	if err != nil {
-		s.log.Warn().Err(err).Msg("failed to marshal stream event")
+		s.log.Warn().Err(err).Msg("Failed to marshal stream event")
 		return
 	}
 	err = s.Manager.Configuration.stanClient.Publish(s.Manager.Configuration.NatsChannel, ep)
 	if err != nil {
-		s.log.Warn().Err(err).Msg("failed to publish stream event")
+		s.log.Warn().Err(err).Msg("Failed to publish stream event")
 		return
 	}
 
