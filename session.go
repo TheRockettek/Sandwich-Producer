@@ -198,6 +198,13 @@ func (s *Session) Open() error {
 		return err
 	}
 
+	// Create listening chan outside of listen, as it needs to happen inside the
+	// mutex lock and needs to exist before calling heartbeat and listen
+	// go rountines.
+	s.listening = make(chan interface{})
+
+	go s.ForwardProduce(s.listening)
+
 	s.wsConn.SetCloseHandler(func(code int, text string) error {
 		return nil
 	})
@@ -295,16 +302,9 @@ func (s *Session) Open() error {
 		},
 	})
 
-	// Create listening chan outside of listen, as it needs to happen inside the
-	// mutex lock and needs to exist before calling heartbeat and listen
-	// go rountines.
-	s.listening = make(chan interface{})
-
 	// Start sending heartbeats and reading messages from Discord.
 	go s.heartbeat(s.listening, h.HeartbeatInterval)
 	go s.listen(s.wsConn, s.listening)
-	go s.ForwardProduce(s.listening)
-
 	return nil
 }
 
