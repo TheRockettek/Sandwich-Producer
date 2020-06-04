@@ -731,8 +731,10 @@ func (s *Session) ForwardProduce(listening <-chan interface{}) {
 	var err error
 	var ep []byte
 
+	println("Listening :)")
 	for e = range s.produceChannel {
 		ep, err = msgpack.Marshal(e)
+		println(ep)
 		if err != nil {
 			s.log.Warn().Err(err).Msg("failed to marshal stream event")
 			continue
