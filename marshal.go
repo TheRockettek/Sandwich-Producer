@@ -164,7 +164,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 				m.log.Trace().Msgf("Added %d member(s) to state for guild %s", len(guild.Members), guild.ID)
 			}
 			_duration := time.Now().Sub(_start)
-			if _duration.Milliseconds() > int64(len(guild.Members)) {
+			if _duration.Milliseconds() > int64(len(guild.Members)) && _duration.Milliseconds() > 100 {
 				m.log.Warn().Msgf("Took %d ms to cache %d members", _duration.Milliseconds(), len(guild.Members))
 			}
 		}

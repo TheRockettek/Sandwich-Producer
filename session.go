@@ -665,7 +665,7 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 		_start := time.Now()
 		ok, data, err = ma(s.Manager, e)
 		_duration := time.Now().Sub(_start)
-		if _duration.Milliseconds() > 20 {
+		if _duration.Milliseconds() > 1000 {
 			s.log.Warn().Msgf("Marshaler took %d ms to process %s", _duration.Milliseconds(), e.Type)
 		}
 		if ok {
