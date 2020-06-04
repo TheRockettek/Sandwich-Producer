@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/vmihailenco/msgpack"
 )
@@ -32,6 +33,15 @@ func shardReadyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err erro
 	return
 }
 
+func shardConnectMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
+
+	ok, se.Data = true, e.Data
+	m.log.Info().Msgf("Shard %d has connected", se.Data.(struct {
+		ShardID int `msgpack:"shard_id"`
+	}).ShardID)
+	return
+}
+
 func shardDisconnectMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 
 	ok, se.Data = true, e.Data
@@ -47,9 +57,16 @@ func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 		return
 	}
 
+	g := ready.Guilds[0]
+	guildID, _ := strconv.Atoi(g.ID)
+	shardID := (guildID >> 22) % m.Configuration.ShardCount
+	counter := m.UnavailableCounters[shardID]
+
+	// Add the specific shards guilds to LockSet that is for the manager
 	m.unavailablesMu.Lock()
-	for _, g := range ready.Guilds {
+	for _, g = range ready.Guilds {
 		m.Unavailables[g.ID] = false
+		counter.Add(g.ID)
 	}
 	m.unavailablesMu.Unlock()
 
@@ -64,6 +81,24 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 	err = guild.Create(e.RawData)
 	if err != nil {
 		return
+	}
+
+	guildID, _ := strconv.Atoi(guild.ID)
+	shardID := (guildID >> 22) % m.Configuration.ShardCount
+	counter := m.UnavailableCounters[shardID]
+	counter.Remove(guild.ID)
+
+	// If the LockSet is now empty, we know all unavailables were added so it is
+	// fully ready now.
+	if counter.Len() <= 0 {
+		m.Sessions[shardID].OnEvent(Event{
+			Type: "SHARD_READY",
+			Data: struct {
+				ShardID int `msgpack:"shard_id"`
+			}{
+				ShardID: shardID,
+			},
+		})
 	}
 
 	// As we remove the guild from m.Unavailables, if the bot resumed we do
@@ -753,6 +788,7 @@ func init() {
 	addMarshaler("READY", readyMarshaler)
 
 	addMarshaler("SHARD_READY", shardReadyMarshaler)
+	addMarshaler("SHARD_CONNECT", shardConnectMarshaler)
 	addMarshaler("SHARD_DISCONNECT", shardDisconnectMarshaler)
 
 	addMarshaler("GUILD_CREATE", guildCreateMarshaler)

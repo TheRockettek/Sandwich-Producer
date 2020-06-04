@@ -58,6 +58,11 @@ type Manager struct {
 	// Oops! All clusters
 	ClusterCount int
 	ClusterID    int
+
+	ReadyLimiter *ConcurrencyLimiter
+
+	// Count denoting how many guilds are unavailable in ready object
+	UnavailableCounters map[int]*LockSet
 }
 
 // features defines different settings for specific things that the
@@ -79,6 +84,9 @@ type managerConfiguration struct {
 
 	// States
 	Features features `json:"features" msgpack:"features"`
+
+	// Int denoting how many clients can be connecting at once
+	ConcurrentClients int `json:"concurrent_clients" json:"concurrent_clients"`
 
 	// Manual sharding
 	Autoshard  bool `json:"autoshard" msgpack:"autoshard"`
@@ -111,18 +119,20 @@ func NewManager(token string, identity string,
 	configuration managerConfiguration, log zerolog.Logger,
 	presence UpdateStatusData, clusterCount int, clusterID int) (m *Manager) {
 	m = &Manager{
-		Token:          token,
-		Identity:       identity,
-		Configuration:  configuration,
-		Client:         &http.Client{Timeout: (20 * time.Second)},
-		UserAgent:      "DiscordBot (https://github.com/TheRockettek/Sandwich-Producer, v" + VERSION + ")",
-		eventChannel:   make(chan Event, BufferSize),
-		produceChannel: make(chan StreamEvent, BufferSize),
-		Unavailables:   make(map[string]bool),
-		log:            log,
-		Presence:       presence,
-		ClusterID:      clusterID,
-		ClusterCount:   clusterCount,
+		Token:               token,
+		Identity:            identity,
+		Configuration:       configuration,
+		Client:              &http.Client{Timeout: (20 * time.Second)},
+		UserAgent:           "DiscordBot (https://github.com/TheRockettek/Sandwich-Producer, v" + VERSION + ")",
+		eventChannel:        make(chan Event, BufferSize),
+		produceChannel:      make(chan StreamEvent, BufferSize),
+		Unavailables:        make(map[string]bool),
+		log:                 log,
+		Presence:            presence,
+		ClusterID:           clusterID,
+		ClusterCount:        clusterCount,
+		ReadyLimiter:        NewConcurrencyLimiter(configuration.ConcurrentClients),
+		UnavailableCounters: make(map[int]*LockSet),
 	}
 	m.Configuration.redisClient = redis.NewClient(configuration.redisOptions)
 

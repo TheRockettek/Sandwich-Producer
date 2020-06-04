@@ -274,11 +274,10 @@ func (s *Session) Open() error {
 		return err
 	}
 	s.log.Debug().Interface("packet", e).Msg("First Packet:")
-
 	s.log.Debug().Msg("We are now connected to Discord, emitting connect event")
 
 	s.OnEvent(Event{
-		Type: "SHARD_READY",
+		Type: "SHARD_CONNECT",
 		Data: struct {
 			ShardID int `msgpack:"shard_id"`
 		}{

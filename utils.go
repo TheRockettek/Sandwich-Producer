@@ -70,6 +70,14 @@ func (ls *LockSet) Get() (values []string) {
 	return ls.Values
 }
 
+// Len returns the size of the LockSet
+func (ls *LockSet) Len() (count int) {
+	ls.RLock()
+	defer ls.RUnlock()
+
+	return len(ls.Values)
+}
+
 // Remove removes a value from the LockSet
 func (ls *LockSet) Remove(_val string) (values []string, change bool) {
 	ls.Lock()
