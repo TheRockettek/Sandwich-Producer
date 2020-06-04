@@ -90,6 +90,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 
 	// If the LockSet is now empty, we know all unavailables were added so it is
 	// fully ready now.
+	println(counter.Len())
 	if counter.Len() <= 0 {
 		m.Sessions[shardID].OnEvent(Event{
 			Type: "SHARD_READY",
