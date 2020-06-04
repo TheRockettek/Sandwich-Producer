@@ -222,6 +222,20 @@ func (mg *MarshalGuild) Save(m *Manager) (err error) {
 		}
 	}
 
+	guildChannels := make(map[string]interface{})
+	for _, c := range mg.ChannelValues {
+		if ma, err = msgpack.Marshal(c); err == nil {
+			guildChannels[c.ID] = ma
+		}
+	}
+
+	guildEmojis := make(map[string]interface{})
+	for _, e := range mg.EmojiValues {
+		if ma, err = msgpack.Marshal(e); err == nil {
+			guildEmojis[e.ID] = ma
+		}
+	}
+
 	if len(guildRoles) > 0 {
 		err = m.Configuration.redisClient.HSet(
 			ctx,
@@ -230,26 +244,12 @@ func (mg *MarshalGuild) Save(m *Manager) (err error) {
 		).Err()
 	}
 
-	guildChannels := make(map[string]interface{})
-	for _, c := range mg.ChannelValues {
-		if ma, err = msgpack.Marshal(c); err == nil {
-			guildChannels[c.ID] = ma
-		}
-	}
-
 	if len(guildChannels) > 0 {
 		err = m.Configuration.redisClient.HSet(
 			ctx,
 			fmt.Sprintf("%s:channels", m.Configuration.RedisPrefix),
 			guildChannels,
 		).Err()
-	}
-
-	guildEmojis := make(map[string]interface{})
-	for _, e := range mg.EmojiValues {
-		if ma, err = msgpack.Marshal(e); err == nil {
-			guildEmojis[e.ID] = ma
-		}
 	}
 
 	if len(guildEmojis) > 0 {
