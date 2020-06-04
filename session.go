@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+	"github.com/vmihailenco/msgpack"
 )
 
 const (
@@ -98,8 +99,8 @@ type Session struct {
 	// When nil, the session is not listening.
 	listening chan interface{}
 
-	// Event listener handles events from sessions
-	rawEventChannel chan RawEvent
+	// Event listener for forwarding events to STAN
+	produceChannel chan StreamEvent
 
 	// sequence tracks the current gateway api websocket sequence number
 	sequence *int64
@@ -130,10 +131,13 @@ type Session struct {
 
 	// Number of concurrent websocket readers
 	MaxListenConcurrency int
+
+	// Parent manager object
+	Manager *Manager
 }
 
 // NewSession creates a new session from a token, shardid and shardcount
-func NewSession(token string, shardid int, shardcount int, eventChannel chan Event, log *zerolog.Logger, gateway string) (s *Session) {
+func NewSession(manager *Manager, token string, shardid int, shardcount int, eventChannel chan Event, log *zerolog.Logger, gateway string) (s *Session) {
 	if !strings.HasPrefix(token, "Bot ") {
 		token = "Bot " + token
 	}
@@ -150,10 +154,11 @@ func NewSession(token string, shardid int, shardcount int, eventChannel chan Eve
 		LastHeartbeatAck:       time.Now().UTC(),
 		Token:                  token,
 		eventChannel:           eventChannel,
-		rawEventChannel:        make(chan RawEvent),
+		produceChannel:         make(chan StreamEvent),
 		gateway:                gateway,
 		log:                    log,
 		MaxListenConcurrency:   4,
+		Manager:                manager,
 	}
 
 	return
@@ -293,6 +298,8 @@ func (s *Session) Open() error {
 	// Start sending heartbeats and reading messages from Discord.
 	go s.heartbeat(s.listening, h.HeartbeatInterval)
 	go s.listen(s.wsConn, s.listening)
+	go s.ForwardProduce(s.listening)
+
 	return nil
 }
 
@@ -478,7 +485,14 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 
 	// Store the message sequence
 	atomic.StoreInt64(s.sequence, e.Sequence)
-	s.eventChannel <- *e
+	// s.eventChannel <- *e
+
+	if !belongsToList(s.Manager.Configuration.IgnoredEvents, e.Type) {
+		ok, se := s.OnEvent(*e)
+		if ok && !belongsToList(s.Manager.Configuration.ProducerBlacklist, e.Type) {
+			s.produceChannel <- se
+		}
+	}
 
 	return e, nil
 }
@@ -670,4 +684,61 @@ func (s *Session) RequestGuildMembers(guildID, query string, limit int) (err err
 	s.wsMutex.Unlock()
 
 	return
+}
+
+// OnEvent will take the origional event data and then handle any caching information
+// along with modifying the origional structure to a more suitable one for streaming.
+func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
+	var data StreamEvent
+	var ma func(*Manager, Event) (bool, StreamEvent, error)
+	var err error
+
+	if ma, ok = marshalers[e.Type]; ok {
+		ok, data, err = ma(s.Manager, e)
+		if ok {
+			se = data
+		}
+	} else {
+		s.log.Warn().Str("type", e.Type).Msg("no available marshaler")
+	}
+
+	// Marshaler may override this function (such as in GUILD_CREATE) so only change it
+	// if it is empty!
+	if se.Type == "" {
+		se.Type = e.Type
+	}
+
+	if err != nil {
+		s.log.Warn().Err(err).Msgf("Failed to handle %s due to error", se.Type)
+	}
+
+	return
+}
+
+// ForwardProduce simply just routes messages it receives and will publish it to
+// NATS/STAN
+func (s *Session) ForwardProduce(listening <-chan interface{}) {
+	var e StreamEvent
+	var err error
+	var ep []byte
+
+	for e = range s.produceChannel {
+		ep, err = msgpack.Marshal(e)
+		if err != nil {
+			s.log.Warn().Err(err).Msg("failed to marshal stream event")
+			continue
+		}
+		err = s.Manager.Configuration.stanClient.Publish(s.Manager.Configuration.NatsChannel, ep)
+		if err != nil {
+			s.log.Warn().Err(err).Msg("failed to publish stream event")
+			continue
+		}
+
+		select {
+		case <-listening:
+			return
+		default:
+			continue
+		}
+	}
 }

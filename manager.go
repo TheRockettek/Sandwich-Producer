@@ -124,6 +124,17 @@ func NewManager(token string, identity string,
 	}
 	m.Configuration.redisClient = redis.NewClient(configuration.redisOptions)
 
+	var err error
+	m.Configuration.natsClient, err = nats.Connect(m.Configuration.NatsAddress)
+	if err != nil {
+		m.log.Panic().Err(err).Send()
+	}
+	m.Configuration.stanClient, err = stan.Connect(m.Configuration.ClusterID,
+		m.Configuration.ClientID+"-"+strconv.Itoa(m.ClusterID), stan.NatsConn(m.Configuration.natsClient))
+	if err != nil {
+		m.log.Panic().Err(err).Send()
+	}
+
 	return
 }
 
@@ -203,9 +214,6 @@ func (m *Manager) Open() (err error) {
 	m.log.Info().Int("shards", m.ShardCount).Bool("autosharded", m.Configuration.Autoshard).Msg("creating sessions")
 	m.Sessions = make(map[int]*Session)
 
-	go m.ForwardEvents()
-	go m.ForwardProduce()
-
 	deployedShards := m.ShardCount / m.ClusterCount
 	for i := (deployedShards * m.ClusterID); i < (deployedShards * (m.ClusterID + 1)); i++ {
 		m.Shards = append(m.Shards, i)
@@ -213,7 +221,7 @@ func (m *Manager) Open() (err error) {
 
 	for shardID := range m.Shards {
 		m.log.Info().Int("shard", shardID).Msg("starting session")
-		session := NewSession(m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
+		session := NewSession(m, m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
 		session.Presence = m.Presence
 		m.Sessions[shardID] = session
 		err = session.Open()
@@ -273,83 +281,83 @@ func (m *Manager) Gateway() (st *GatewayBotResponse, err error) {
 	return
 }
 
-// OnEvent will take the origional event data and then handle any caching information
-// along with modifying the origional structure to a more suitable one for streaming.
-func (m *Manager) OnEvent(e Event) (ok bool, se StreamEvent) {
-	var data StreamEvent
-	var ma func(*Manager, Event) (bool, StreamEvent, error)
-	var err error
+// // OnEvent will take the origional event data and then handle any caching information
+// // along with modifying the origional structure to a more suitable one for streaming.
+// func (m *Manager) OnEvent(e Event) (ok bool, se StreamEvent) {
+// 	var data StreamEvent
+// 	var ma func(*Manager, Event) (bool, StreamEvent, error)
+// 	var err error
 
-	if ma, ok = marshalers[e.Type]; ok {
-		ok, data, err = ma(m, e)
-		if ok {
-			se = data
-		}
-	} else {
-		m.log.Warn().Str("type", e.Type).Msg("no available marshaler")
-	}
+// 	if ma, ok = marshalers[e.Type]; ok {
+// 		ok, data, err = ma(m, e)
+// 		if ok {
+// 			se = data
+// 		}
+// 	} else {
+// 		m.log.Warn().Str("type", e.Type).Msg("no available marshaler")
+// 	}
 
-	// Marshaler may override this function (such as in GUILD_CREATE) so only change it
-	// if it is empty!
-	if se.Type == "" {
-		se.Type = e.Type
-	}
+// 	// Marshaler may override this function (such as in GUILD_CREATE) so only change it
+// 	// if it is empty!
+// 	if se.Type == "" {
+// 		se.Type = e.Type
+// 	}
 
-	if err != nil {
-		m.log.Warn().Err(err).Msgf("Failed to handle %s due to error", se.Type)
-	}
+// 	if err != nil {
+// 		m.log.Warn().Err(err).Msgf("Failed to handle %s due to error", se.Type)
+// 	}
 
-	return
-}
+// 	return
+// }
 
-// ForwardEvents is the global cache handler, once it has finished handling events,
-// if it decides to sent it on to consumers, it should send it to the produce channel.
-func (m *Manager) ForwardEvents() {
-	var ok bool
-	var se StreamEvent
-	for e := range m.eventChannel {
-		if belongsToList(m.Configuration.IgnoredEvents, e.Type) {
-			continue
-		}
+// // ForwardEvents is the global cache handler, once it has finished handling events,
+// // if it decides to sent it on to consumers, it should send it to the produce channel.
+// func (m *Manager) ForwardEvents() {
+// 	var ok bool
+// 	var se StreamEvent
+// 	for e := range m.eventChannel {
+// 		if belongsToList(m.Configuration.IgnoredEvents, e.Type) {
+// 			continue
+// 		}
 
-		ok, se = m.OnEvent(e)
+// 		ok, se = m.OnEvent(e)
 
-		if ok && !belongsToList(m.Configuration.ProducerBlacklist, e.Type) {
-			m.produceChannel <- se
-		}
-	}
-}
+// 		if ok && !belongsToList(m.Configuration.ProducerBlacklist, e.Type) {
+// 			m.produceChannel <- se
+// 		}
+// 	}
+// }
 
-// ForwardProduce simply just routes messages it receives and will publish it to
-// NATS/STAN
-func (m *Manager) ForwardProduce() {
-	var e StreamEvent
-	var err error
-	var ep []byte
+// // ForwardProduce simply just routes messages it receives and will publish it to
+// // NATS/STAN
+// func (m *Manager) ForwardProduce() {
+// 	var e StreamEvent
+// 	var err error
+// 	var ep []byte
 
-	m.Configuration.natsClient, err = nats.Connect(m.Configuration.NatsAddress)
-	if err != nil {
-		m.log.Panic().Err(err).Send()
-	}
-	m.Configuration.stanClient, err = stan.Connect(m.Configuration.ClusterID,
-		m.Configuration.ClientID+"-"+strconv.Itoa(m.ClusterID), stan.NatsConn(m.Configuration.natsClient))
-	if err != nil {
-		m.log.Panic().Err(err).Send()
-	}
+// 	m.Configuration.natsClient, err = nats.Connect(m.Configuration.NatsAddress)
+// 	if err != nil {
+// 		m.log.Panic().Err(err).Send()
+// 	}
+// 	m.Configuration.stanClient, err = stan.Connect(m.Configuration.ClusterID,
+// 		m.Configuration.ClientID+"-"+strconv.Itoa(m.ClusterID), stan.NatsConn(m.Configuration.natsClient))
+// 	if err != nil {
+// 		m.log.Panic().Err(err).Send()
+// 	}
 
-	for e = range m.produceChannel {
-		ep, err = msgpack.Marshal(e)
-		if err != nil {
-			m.log.Warn().Err(err).Msg("failed to marshal stream event")
-			continue
-		}
-		err = m.Configuration.stanClient.Publish(m.Configuration.NatsChannel, ep)
-		if err != nil {
-			m.log.Warn().Err(err).Msg("failed to publish stream event")
-			continue
-		}
-	}
-}
+// 	for e = range m.produceChannel {
+// 		ep, err = msgpack.Marshal(e)
+// 		if err != nil {
+// 			m.log.Warn().Err(err).Msg("failed to marshal stream event")
+// 			continue
+// 		}
+// 		err = m.Configuration.stanClient.Publish(m.Configuration.NatsChannel, ep)
+// 		if err != nil {
+// 			m.log.Warn().Err(err).Msg("failed to publish stream event")
+// 			continue
+// 		}
+// 	}
+// }
 
 func (m *Manager) getGuild(id string) (g MarshalGuild, err error) {
 	guildData, err := m.Configuration.redisClient.HGet(
