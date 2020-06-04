@@ -239,6 +239,8 @@ func (m *Manager) Open() (err error) {
 		session := NewSession(m, m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
 		session.Presence = m.Presence
 		m.Sessions[shardID] = session
+
+		<-m.ReadyLimiter.tickets
 		err = session.Open()
 		if err != nil {
 			return

@@ -26,11 +26,12 @@ func addMarshaler(event string, marshaler func(*Manager, Event) (bool, StreamEve
 }
 
 func shardReadyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
-
 	ok, se.Data = true, e.Data
-	m.log.Info().Msgf("Shard %d is ready", e.Data.(struct {
+	ShardID := e.Data.(struct {
 		ShardID int `msgpack:"shard_id"`
-	}).ShardID)
+	}).ShardID
+	m.ReadyLimiter.tickets <- ShardID
+	m.log.Info().Msgf("Shard %d is ready", ShardID)
 	return
 }
 
@@ -165,7 +166,7 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 				m.log.Trace().Msgf("Added %d member(s) to state for guild %s", len(guild.Members), guild.ID)
 			}
 			_duration := time.Now().Sub(_start)
-			if _duration.Milliseconds() > 500 {
+			if _duration.Milliseconds() > int64(len(guild.Members)) {
 				m.log.Warn().Msgf("Took %d ms to cache %d members", _duration.Milliseconds(), len(guild.Members))
 			}
 		}
