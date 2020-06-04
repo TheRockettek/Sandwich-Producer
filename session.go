@@ -662,7 +662,12 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 	}
 
 	if ma, ok = marshalers[e.Type]; ok {
+		_start := time.Now()
 		ok, data, err = ma(s.Manager, e)
+		_duration := time.Now().Sub(_start)
+		if _duration.Milliseconds() > 20 {
+			s.log.Warn().Dur("time", _duration).Msg("marshaler took a while to process event")
+		}
 		if ok {
 			se = data
 		}
