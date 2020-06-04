@@ -233,6 +233,8 @@ func (s *Session) Open() error {
 		return err
 	}
 
+	s.log.Debug().Msg("1")
+
 	// We now have to either Resume or Identify.
 	sequence := atomic.LoadInt64(s.sequence)
 	if s.sessionID == "" && sequence == 0 {
@@ -267,13 +269,16 @@ func (s *Session) Open() error {
 			return err
 		}
 	}
+	s.log.Debug().Msg("2")
 
 	// Discord should now send a READY or RESUMED packet.
 	mt, m, err = s.wsConn.ReadMessage()
 	if err != nil {
 		return err
 	}
+	s.log.Debug().Msg("3")
 	e, err = s.onEvent(mt, m)
+	s.log.Debug().Msg("4")
 	if err != nil {
 		return err
 	}
@@ -487,12 +492,16 @@ func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
 	atomic.StoreInt64(s.sequence, e.Sequence)
 	// s.eventChannel <- *e
 
+	s.log.Debug().Msg("doing on event")
+
 	if !belongsToList(s.Manager.Configuration.IgnoredEvents, e.Type) {
 		ok, se := s.OnEvent(*e)
 		if ok && !belongsToList(s.Manager.Configuration.ProducerBlacklist, e.Type) {
 			s.produceChannel <- se
 		}
 	}
+
+	s.log.Debug().Msg("finished on event")
 
 	return e, nil
 }
