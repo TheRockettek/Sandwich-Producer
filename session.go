@@ -99,9 +99,6 @@ type Session struct {
 	// When nil, the session is not listening.
 	listening chan interface{}
 
-	// Event listener for forwarding events to STAN
-	produceChannel chan StreamEvent
-
 	// sequence tracks the current gateway api websocket sequence number
 	sequence *int64
 
@@ -154,7 +151,6 @@ func NewSession(manager *Manager, token string, shardid int, shardcount int, eve
 		LastHeartbeatAck:       time.Now().UTC(),
 		Token:                  token,
 		eventChannel:           eventChannel,
-		produceChannel:         make(chan StreamEvent),
 		gateway:                gateway,
 		log:                    log,
 		MaxListenConcurrency:   4,
@@ -202,8 +198,6 @@ func (s *Session) Open() error {
 	// mutex lock and needs to exist before calling heartbeat and listen
 	// go rountines.
 	s.listening = make(chan interface{})
-
-	go s.ForwardProduce(s.listening)
 
 	s.wsConn.SetCloseHandler(func(code int, text string) error {
 		return nil
@@ -289,7 +283,7 @@ func (s *Session) Open() error {
 
 	s.log.Debug().Msg("We are now connected to Discord, emitting connect event")
 
-	s.dispatch("SHARD_READY", &Event{
+	s.OnEvent(Event{
 		Type: "SHARD_READY",
 		Data: struct {
 			ShardID int `msgpack:"shard_id"`
@@ -391,113 +385,6 @@ func (s *Session) heartbeat(listening <-chan interface{}, heartbeatIntervalMsec 
 	}
 }
 
-func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
-	var err error
-	var reader io.Reader
-	reader = bytes.NewBuffer(message)
-
-	// If this is a compressed message, uncompress it.
-	if messageType == websocket.BinaryMessage {
-
-		z, err2 := zlib.NewReader(reader)
-		if err2 != nil {
-			s.log.Error().Err(err).Msg("error uncompressing websocket message")
-			return nil, err2
-		}
-
-		defer func() {
-			err3 := z.Close()
-			if err3 != nil {
-				s.log.Warn().Err(err).Msg("error closing zlib")
-			}
-		}()
-
-		reader = z
-	}
-
-	// Decode the event into an Event struct.
-	var e *Event
-	decoder := jsoniter.NewDecoder(reader)
-	if err = decoder.Decode(&e); err != nil {
-		s.log.Error().Err(err).Msg("error decoding websocket message")
-		return e, err
-	}
-
-	// Ping request.
-	// Must respond with a heartbeat packet within 5 seconds
-	if e.Operation == 1 {
-		s.log.Debug().Msg("sending heartbeat in response to Op1")
-		s.wsMutex.Lock()
-		err = s.wsConn.WriteJSON(Heartbeat{1, atomic.LoadInt64(s.sequence)})
-		s.wsMutex.Unlock()
-		if err != nil {
-			s.log.Error().Msg("error sending heartbeat in response to Op1")
-			return e, err
-		}
-
-		return e, nil
-	}
-
-	// Reconnect
-	// Must immediately disconnect from gateway and reconnect to new gateway.
-	if e.Operation == 7 {
-		s.log.Debug().Msg("Closing and reconnecting in response to Op7")
-		s.CloseWithStatus(4000)
-		s.reconnect()
-		return e, nil
-	}
-
-	// Invalid Session
-	// Must respond with a Identify packet.
-	if e.Operation == 9 {
-
-		s.log.Debug().Msg("sending identify packet to gateway in response to Op9")
-
-		err = s.identify()
-		if err != nil {
-			s.log.Warn().Err(err).Str("gateway", s.gateway).Msg("error sending gateway identify packet")
-			return e, err
-		}
-
-		return e, nil
-	}
-
-	if e.Operation == 10 {
-		// Op10 is handled by Open()
-		return e, nil
-	}
-
-	if e.Operation == 11 {
-		s.Lock()
-		s.LastHeartbeatAck = time.Now().UTC()
-		s.log.Trace().Int("shard", s.ShardID).Time("time", s.LastHeartbeatAck).Msg("received heartbeat")
-		s.Unlock()
-
-		return e, nil
-	}
-
-	// Do not try to Dispatch a non-Dispatch Message
-	if e.Operation != 0 {
-		// But we probably should be doing something with them.
-		// TEMP
-		s.log.Warn().Int("op", e.Operation).Int64("seq", e.Sequence).Str("type", e.Type).Str("data", string(e.RawData)).Str("message", string(message)).Msg("unknown")
-		return e, nil
-	}
-
-	// Store the message sequence
-	atomic.StoreInt64(s.sequence, e.Sequence)
-	// s.eventChannel <- *e
-
-	if !belongsToList(s.Manager.Configuration.IgnoredEvents, e.Type) {
-		ok, se := s.OnEvent(*e)
-		if ok && !belongsToList(s.Manager.Configuration.ProducerBlacklist, e.Type) {
-			s.produceChannel <- se
-		}
-	}
-
-	return e, nil
-}
-
 // identify sends the identify packet to the gateway
 func (s *Session) identify() error {
 	properties := identifyProperties{
@@ -563,6 +450,95 @@ func (s *Session) reconnect() {
 	}
 }
 
+func (s *Session) onEvent(messageType int, message []byte) (*Event, error) {
+	var err error
+	var reader io.Reader
+	reader = bytes.NewBuffer(message)
+
+	// If this is a compressed message, uncompress it.
+	if messageType == websocket.BinaryMessage {
+		z, err2 := zlib.NewReader(reader)
+		if err2 != nil {
+			s.log.Error().Err(err).Msg("error uncompressing websocket message")
+			return nil, err2
+		}
+		defer func() {
+			err3 := z.Close()
+			if err3 != nil {
+				s.log.Warn().Err(err).Msg("error closing zlib")
+			}
+		}()
+		reader = z
+	}
+
+	// Decode the event into an Event struct.
+	var e *Event
+	decoder := jsoniter.NewDecoder(reader)
+	if err = decoder.Decode(&e); err != nil {
+		s.log.Error().Err(err).Msg("error decoding websocket message")
+		return e, err
+	}
+
+	// Ping request.
+	// Must respond with a heartbeat packet within 5 seconds
+	if e.Operation == 1 {
+		s.log.Debug().Msg("sending heartbeat in response to Op1")
+		s.wsMutex.Lock()
+		err = s.wsConn.WriteJSON(Heartbeat{1, atomic.LoadInt64(s.sequence)})
+		s.wsMutex.Unlock()
+		if err != nil {
+			s.log.Error().Msg("error sending heartbeat in response to Op1")
+			return e, err
+		}
+		return e, nil
+	}
+
+	// Reconnect
+	// Must immediately disconnect from gateway and reconnect to new gateway.
+	if e.Operation == 7 {
+		s.log.Debug().Msg("Closing and reconnecting in response to Op7")
+		s.CloseWithStatus(4000)
+		s.reconnect()
+		return e, nil
+	}
+
+	// Invalid Session
+	// Must respond with a Identify packet.
+	if e.Operation == 9 {
+		s.log.Debug().Msg("sending identify packet to gateway in response to Op9")
+		err = s.identify()
+		if err != nil {
+			s.log.Warn().Err(err).Str("gateway", s.gateway).Msg("error sending gateway identify packet")
+			return e, err
+		}
+		return e, nil
+	}
+
+	if e.Operation == 10 {
+		return e, nil
+	}
+
+	if e.Operation == 11 {
+		s.Lock()
+		s.LastHeartbeatAck = time.Now().UTC()
+		s.log.Trace().Int("shard", s.ShardID).Time("time", s.LastHeartbeatAck).Msg("received heartbeat")
+		s.Unlock()
+		return e, nil
+	}
+
+	// Do not try to Dispatch a non-Dispatch Message
+	if e.Operation != 0 {
+		s.log.Warn().Int("op", e.Operation).Int64("seq", e.Sequence).Str("type", e.Type).Str("data", string(e.RawData)).Str("message", string(message)).Msg("unknown")
+		return e, nil
+	}
+
+	// Store the message sequence
+	atomic.StoreInt64(s.sequence, e.Sequence)
+	s.OnEvent(*e)
+
+	return e, nil
+}
+
 // CloseWithStatus closes a websocket with a specified status code and stops all listening/heartbeat goroutines.
 func (s *Session) CloseWithStatus(statusCode int) (err error) {
 	s.Lock()
@@ -597,7 +573,7 @@ func (s *Session) CloseWithStatus(statusCode int) (err error) {
 	s.Unlock()
 
 	s.log.Debug().Msg("emit disconnect event")
-	s.dispatch("SHARD_DISCONNECT", &Event{
+	s.OnEvent(Event{
 		Type: "SHARD_DISCONNECT",
 		Data: ShardDisconnectOp{
 			ShardID:    s.ShardID,
@@ -656,12 +632,6 @@ func (s *Session) SendUpdateStatus(usd UpdateStatusData) (err error) {
 	return
 }
 
-func (s *Session) dispatch(et string, e *Event) error {
-	var err error
-	s.eventChannel <- *e
-	return err
-}
-
 // RequestGuildMembers requests guild members from the gateway
 // The gateway responds with GuildMembersChunk events
 // guildID  : The ID of the guild to request members of
@@ -694,6 +664,10 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 	var ma func(*Manager, Event) (bool, StreamEvent, error)
 	var err error
 
+	if !belongsToList(s.Manager.Configuration.IgnoredEvents, e.Type) {
+		return
+	}
+
 	if ma, ok = marshalers[e.Type]; ok {
 		ok, data, err = ma(s.Manager, e)
 		if ok {
@@ -701,6 +675,10 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 		}
 	} else {
 		s.log.Warn().Str("type", e.Type).Msg("no available marshaler")
+	}
+
+	if !ok || belongsToList(s.Manager.Configuration.ProducerBlacklist, e.Type) {
+		return
 	}
 
 	// Marshaler may override this function (such as in GUILD_CREATE) so only change it
@@ -713,33 +691,16 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 		s.log.Warn().Err(err).Msgf("Failed to handle %s due to error", se.Type)
 	}
 
-	return
-}
-
-// ForwardProduce simply just routes messages it receives and will publish it to
-// NATS/STAN
-func (s *Session) ForwardProduce(listening <-chan interface{}) {
-	var e StreamEvent
-	var err error
-	var ep []byte
-
-	for e = range s.produceChannel {
-		ep, err = msgpack.Marshal(e)
-		if err != nil {
-			s.log.Warn().Err(err).Msg("failed to marshal stream event")
-			continue
-		}
-		err = s.Manager.Configuration.stanClient.Publish(s.Manager.Configuration.NatsChannel, ep)
-		if err != nil {
-			s.log.Warn().Err(err).Msg("failed to publish stream event")
-			continue
-		}
-
-		select {
-		case <-listening:
-			return
-		default:
-			continue
-		}
+	ep, err := msgpack.Marshal(e)
+	if err != nil {
+		s.log.Warn().Err(err).Msg("failed to marshal stream event")
+		return
 	}
+	err = s.Manager.Configuration.stanClient.Publish(s.Manager.Configuration.NatsChannel, ep)
+	if err != nil {
+		s.log.Warn().Err(err).Msg("failed to publish stream event")
+		return
+	}
+
+	return
 }
