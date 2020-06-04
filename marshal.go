@@ -72,8 +72,6 @@ func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 	}
 	m.unavailablesMu.Unlock()
 
-	ok = true
-
 	return
 }
 
