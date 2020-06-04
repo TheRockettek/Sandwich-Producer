@@ -26,7 +26,7 @@ var zlog = zerolog.New(zerolog.ConsoleWriter{
 var ctx = context.Background()
 
 func init() {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 }
 
 func main() {
