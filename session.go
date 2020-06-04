@@ -689,7 +689,7 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 		s.log.Warn().Err(err).Msgf("Failed to handle %s due to error", se.Type)
 	}
 
-	ep, err := msgpack.Marshal(e)
+	ep, err := msgpack.Marshal(se)
 	if err != nil {
 		s.log.Warn().Err(err).Msg("failed to marshal stream event")
 		return
