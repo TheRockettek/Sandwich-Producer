@@ -233,6 +233,9 @@ func (m *Manager) Open() (err error) {
 
 	for shardID := range m.Shards {
 		m.log.Info().Int("shard", shardID).Msg("starting session")
+		m.UnavailableCounters[shardID] = &LockSet{
+			Values: make([]string, 0),
+		}
 		session := NewSession(m, m.Token, shardID, m.ShardCount, m.eventChannel, &m.log, m.GatewayResponse.URL)
 		session.Presence = m.Presence
 		m.Sessions[shardID] = session
