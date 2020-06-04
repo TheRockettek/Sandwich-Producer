@@ -114,12 +114,6 @@ type Session struct {
 	// logging interface
 	log *zerolog.Logger
 
-	// map of guilds that are unavailable to differenticate joins and creations.
-	// the bool dictates if the guild was already in cache to know if the guild
-	// was previously down. Initial guild creates will make this false and will
-	// be true if the guild goes down during runtime.
-	Unavailables map[string]bool
-
 	// channel that is shared with all shards to pipe to manager
 	eventChannel chan Event
 

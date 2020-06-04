@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -48,7 +49,8 @@ type Manager struct {
 	Shards          []int
 
 	// List of unavailable guilds from READY events
-	Unavailables map[string]bool
+	Unavailables   map[string]bool
+	unavailablesMu sync.RWMutex
 
 	// Presence that each session will be given
 	Presence UpdateStatusData

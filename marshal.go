@@ -47,9 +47,11 @@ func readyMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err error) {
 		return
 	}
 
+	m.unavailablesMu.Lock()
 	for _, g := range ready.Guilds {
 		m.Unavailables[g.ID] = false
 	}
+	m.unavailablesMu.Unlock()
 
 	ok = true
 
@@ -82,6 +84,8 @@ func guildCreateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 	}
 
 	// Check if guild is in the pending availability map or is currently in cache.
+	m.unavailablesMu.RLock()
+	defer m.unavailablesMu.RUnlock()
 	if un, uo := m.Unavailables[guild.ID]; uo || ic {
 		// If the guild was unavailable, this means it is now available so fire the
 		// available event. If it is in the cache it also means that it is likely to
@@ -150,11 +154,15 @@ func guildDeleteMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, err err
 		return
 	}
 
+	m.unavailablesMu.Lock()
 	delete(m.Unavailables, partialGuild.ID)
+	m.unavailablesMu.Unlock()
 
 	if partialGuild.Unavailable {
 		// guild has gone down
+		m.unavailablesMu.Lock()
 		m.Unavailables[partialGuild.ID] = true
+		m.unavailablesMu.Unlock()
 		ok = true
 		se = StreamEvent{
 			Type: "GUILD_UNAVAILABLE",

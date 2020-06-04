@@ -9,6 +9,7 @@ import os
 
 rgx = re.compile(r"`((json|msgpack):\"(\S+)\")\s?((json|msgpack):\"(\S+)\")?`")
 
+
 def convert(string):
     done = []
     results = re.findall(rgx, string)
@@ -23,6 +24,7 @@ def convert(string):
                 done.append(_final)
                 print(_final)
     return string
+
 
 for f in os.listdir(os.getcwd()):
     path = os.path.join(os.getcwd(), f)
