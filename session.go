@@ -664,7 +664,7 @@ func (s *Session) OnEvent(e Event) (ok bool, se StreamEvent) {
 	var ma func(*Manager, Event) (bool, StreamEvent, error)
 	var err error
 
-	if !belongsToList(s.Manager.Configuration.IgnoredEvents, e.Type) {
+	if belongsToList(s.Manager.Configuration.IgnoredEvents, e.Type) {
 		return
 	}
 
