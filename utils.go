@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -170,4 +171,22 @@ func NewConcurrencyLimiter(limit int) *ConcurrencyLimiter {
 	}
 
 	return c
+}
+
+// Equal iterates fields that can be exported and will return
+// a boolean if both are equal
+func (m *Member) Equal(me Member) bool {
+	elem := reflect.TypeOf(m).Elem()
+	for i := 0; i < elem.NumField(); i++ {
+		field := elem.Field(i)
+		tagname, ok := field.Tag.Lookup("msgpack")
+		if ok && tagname != "-" && tagname != "" {
+			val1 := reflect.Indirect(reflect.ValueOf(m)).FieldByName(field.Name)
+			val2 := reflect.Indirect(reflect.ValueOf(me)).FieldByName(field.Name)
+			if !reflect.DeepEqual(val1.Interface(), val2.Interface()) {
+				return false
+			}
+		}
+	}
+	return true
 }

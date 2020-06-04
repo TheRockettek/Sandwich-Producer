@@ -609,7 +609,7 @@ func guildMemberUpdateMarshaler(m *Manager, e Event) (ok bool, se StreamEvent, e
 		m.log.Error().Err(err).Msg("failed to update member")
 	}
 
-	if !reflect.DeepEqual(&member, &updatedMember) {
+	if !member.Equal(updatedMember) {
 		ok = true
 		se = StreamEvent{
 			Type: "GUILD_MEMBER_UPDATE",
