@@ -48,7 +48,7 @@ func main() {
 			ClientID:          "welcomer",
 			ClusterID:         "cluster",
 			RedisPrefix:       "welcomer",
-			ConcurrentClients: 1,
+			ConcurrentClients: 4,
 			ShardCount:        *shardCount,
 			Features: features{
 				CacheMembers: true,
