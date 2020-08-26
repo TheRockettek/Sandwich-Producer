@@ -1,91 +1,79 @@
 package main
 
 import (
-	"context"
-	"flag"
-	"io/ioutil"
+	"math/rand"
 	"os"
 	"os/signal"
-	"strings"
+	"strconv"
 	"syscall"
-	"time"
 
-	_ "net/http/pprof"
-
-	"github.com/go-redis/redis/v8"
-	jsoniterator "github.com/json-iterator/go"
+	"github.com/TheRockettek/Sandwich-Producer/gateway"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/rs/zerolog"
 )
 
-var jsoniter = jsoniterator.ConfigCompatibleWithStandardLibrary
-var zlog = zerolog.New(zerolog.ConsoleWriter{
-	Out:        os.Stdout,
-	TimeFormat: time.Stamp,
-}).With().Timestamp().Logger()
+const config = `
+{
+    "token": "MzQyNjg1ODA3MjIxNDA3NzQ0.XuFUXg.R2_YMJm9tVx7W0RW264Nv___ovQ",
+    "_token": "MzMwNDE2ODUzOTcxMTA3ODQw.XtrkdQ.QsE4ljXRHahwGfDqm7_1n2CK69I",
+    "concurrent_clients":1,
+    "autoshard":false,
+    "shard_count":2,
+    "cluster_count":1,
+    "cluster_id":0,
+    "max_heartbeat_failures":5,
+    "redis":{
+        "address":"127.0.0.1:6379",
+        "password":"",
+        "database":0,
+        "prefix":"welcomer"
+    },
+    "nats":{
+        "address":"127.0.0.1:4222",
+        "channel":"welcomer",
+        "cluster":"cluster",
+        "client":"welcomer"
+    },
+    "event_blacklist":[
 
-var ctx = context.Background()
+    ],
+    "produce_blacklist":[
+
+    ],
+
+    "compression": true,
+    "large_threshold": 100,
+    "default_activity": {},
+    "guild_subscriptions": false
+}
+`
 
 func init() {
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 }
 
 func main() {
-	var err error
-	token := flag.String("token", "", "token the bot will use to authenticate")
-	shardCount := flag.Int("shards", 1, "shard count to use")
-	flag.Parse()
 
-	pass, err := ioutil.ReadFile("REDIS_PASSWORD")
-	redisPassword := strings.TrimSpace(string(pass))
-	zlog.Info().Msgf("using redis password: '%s'", redisPassword)
+	configuration := gateway.Configuration{}
+	jsoniter.Unmarshal([]byte(config), &configuration)
 
-	m := NewManager(
-		*token,
-		"welcomer",
-		managerConfiguration{
-			NatsAddress:       "127.0.0.1:4222",
-			NatsChannel:       "welcomer",
-			ClientID:          "welcomer",
-			ClusterID:         "cluster",
-			RedisPrefix:       "welcomer",
-			ConcurrentClients: 2,
-			ShardCount:        *shardCount,
-			Features: features{
-				CacheMembers: true,
-				StoreMutuals: true,
-			},
-			IgnoredEvents: []string{"PRESENCE_UPDATE", "TYPING_START"},
-			redisOptions: &redis.Options{
-				Addr:     "127.0.0.1:6379",
-				Password: redisPassword,
-				DB:       0,
-			},
-		},
-		zlog,
-		UpdateStatusData{
-			Game: &Game{
-				Name: "welcomer.gg | +help",
-			},
-		},
-		1,
-		0,
-	)
+	configuration.Nats.ClientID += "-" + strconv.Itoa(rand.Intn(9999))
+	logger.Info().Msgf("Using client id %s", configuration.Nats.ClientID)
 
-	err = m.ClearCache()
+	m, err := gateway.NewManager(configuration, gateway.Features{}, logger)
 	if err != nil {
-		zlog.Panic().Err(err).Msg("Could not clear cache")
+		panic(err)
 	}
 
 	err = m.Open()
 	if err != nil {
-		zlog.Panic().Err(err).Msg("Cold not start manager")
+		panic(err)
 	}
-
-	zlog.Info().Msg("Sessions have now started. Do ^C to close sessions")
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
 
 	m.Close()
+	println("\nsuccess\n")
 }
